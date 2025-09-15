@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from "axios";
+import axios from "axios";
 import {
   validateRunDetail,
   validateHit,
@@ -100,7 +100,7 @@ apiClient.interceptors.response.use(
       const url = response.config.url || "";
 
       // Validate RunDetail responses
-      if (url.match(/^\/runs\/[^\/]+$/ ) && !url.includes("/hits")) {
+      if (url.match(/^\/runs\/[^/]+$/ ) && !url.includes("/hits")) {
         const validation = validateRunDetail(response.data);
         if (!validation.isValid) {
           console.error(
@@ -250,8 +250,8 @@ apiClient.interceptors.response.use(
     }
 
     // Throw user-friendly error
-    const enhancedError = new Error(userMessage);
-    (enhancedError as any).apiError = apiError;
+    const enhancedError = new Error(userMessage) as Error & { apiError: APIError };
+    enhancedError.apiError = apiError;
     throw enhancedError;
   }
 );

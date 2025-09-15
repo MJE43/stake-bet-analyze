@@ -1,11 +1,7 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  liveStreamsApi,
-  type BetRecord,
-  type TailResponse,
-  type StreamBetsFilters,
-} from "@/lib/api";
+import { liveStreamsApi } from "@/lib/api/streams";
+import type { BetRecord, TailResponse, StreamBetsFilters } from "@/lib/api/types";
 
 export interface UseStreamTailUpdaterOptions {
   streamId: string;
@@ -100,7 +96,7 @@ export function useStreamTailUpdater(
       bets: merged,
       total: (oldData?.total ?? merged.length) + uniqueIncoming.length,
     };
-  };
+  }, [mergedFilters]);
 
   const query = useQuery<TailResponse>({
     queryKey: ["stream-tail", streamId],
@@ -141,7 +137,7 @@ export function useStreamTailUpdater(
         onNewBets(incoming);
       }
     }
-  }, [query.data, streamId, mergedFilters, queryClient, onNewBets]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.data, streamId, mergedFilters, queryClient, onNewBets, mergeDedupTrim]);
 
   return {
     isFetching: query.isFetching,

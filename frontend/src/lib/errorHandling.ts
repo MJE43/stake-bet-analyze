@@ -3,13 +3,16 @@ import { type AxiosError } from "axios";
 
 // Error retry logic for API calls
 export const shouldRetry = (error: AxiosError | unknown): boolean => {
+  const axiosError = error as AxiosError;
+  const status = axiosError?.response?.status;
+
   // Don't retry on 4xx client errors (except 408, 429)
-  if ((error as AxiosError)?.response?.status >= 400 && (error as AxiosError)?.response?.status < 500) {
-    return err.response?.status === 408 || err.response?.status === 429;
+  if (status && status >= 400 && status < 500) {
+    return status === 408 || status === 429;
   }
 
   // Retry on 5xx server errors and network errors
-  return (error as AxiosError)?.response?.status >= 500 || !(error as AxiosError)?.response;
+  return (status && status >= 500) || !axiosError?.response;
 };
 
 // Success toast with consistent styling
@@ -29,7 +32,8 @@ export const showSuccessToast = (message: string) => {
 
 // Error toast with consistent styling
 export const showErrorToast = (error: AxiosError | unknown, fallbackMessage?: string) => {
-  const message = (error as AxiosError)?.response?.data?.message ||
+  const axiosError = error as AxiosError;
+  const message = (axiosError?.response?.data as { message?: string })?.message ||
                   (error as Error)?.message ||
                   fallbackMessage ||
                   'An error occurred';

@@ -8,7 +8,7 @@ import {
 import { Activity, Clock } from "lucide-react";
 import LiveBetsTable from "@/components/live-streams/LiveBetsTable";
 
-import { type BetRecord } from "@/lib/api";
+import type { BetRecord } from "@/lib/api/types";
 
 interface BetsTableCardProps {
   streamId: string;

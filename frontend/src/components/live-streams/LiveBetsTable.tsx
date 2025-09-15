@@ -12,7 +12,7 @@ import {
   type MRT_Virtualizer,
 } from "mantine-react-table";
 import { Text, Badge, Group, Stack } from "@mantine/core";
-import { type BetRecord } from "@/lib/api";
+import type { BetRecord } from "@/lib/api/types";
 
 interface LiveBetsTableProps {
   streamId: string;

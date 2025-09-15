@@ -6,7 +6,7 @@ import {
   type MRT_ColumnDef,
 } from "mantine-react-table";
 import { Text, Badge, Checkbox } from "@mantine/core";
-import { type Hit } from "@/lib/api";
+import type { Hit } from "@/lib/api/types";
 
 interface HitsTableProps {
   hits: Hit[];

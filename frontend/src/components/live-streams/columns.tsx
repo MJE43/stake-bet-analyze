@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Star, StarOff, TrendingUp, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BetRecord } from "@/lib/api";
+import type { BetRecord } from "@/lib/api/types";
 
 // Types for the table
 export type SortField =

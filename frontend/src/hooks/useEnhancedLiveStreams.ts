@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { liveStreamsApi } from "@/lib/api";
-import type { StreamListFilters, StreamBetsFilters } from "@/lib/api";
+import { liveStreamsApi } from "@/lib/api/streams";
+import type { StreamListFilters, StreamBetsFilters } from "@/lib/api/types";
 // import { useStreamNotifications } from "./useStreamNotifications";
 import {
   shouldRetry,

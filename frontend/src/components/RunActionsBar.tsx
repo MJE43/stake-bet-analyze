@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { runsApi } from "@/lib/api";
+import { runsApi } from "@/lib/api/runs";
 
 interface Run {
   id: string;

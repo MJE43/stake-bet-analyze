@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { liveStreamsApi, type BetRecord, type TailResponse } from "@/lib/api";
+import { liveStreamsApi } from "@/lib/api/streams";
+import type { BetRecord, TailResponse } from "@/lib/api/types";
 
 export interface UseStreamTailOptions {
   streamId: string;
@@ -115,7 +116,7 @@ export function useStreamTail(
         error
       );
     }
-  }, [streamId, isPolling, tailQuery, queryClient, onNewBets, onError]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamId, isPolling, tailQuery, queryClient, onNewBets, onError]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -134,7 +135,7 @@ export function useStreamTail(
 
     // Fetch immediately
     fetchNewBets();
-  }, [streamId, pollingInterval, fetchNewBets]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamId, pollingInterval, fetchNewBets]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -165,7 +166,7 @@ export function useStreamTail(
     return () => {
       stopPolling();
     };
-  }, [enabled, streamId, startPolling, stopPolling]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, streamId, startPolling, stopPolling]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -8,16 +8,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AppError, normalizeError, reportError } from "@/lib/errorModel";
 
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onError?: (error: AppError, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
   hasError: boolean;
-  error?: Error;
+  error?: AppError;
+  errorId?: string;
 }
 
 class ErrorBoundary extends Component<Props, State> {
@@ -27,16 +29,38 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    const appError = normalizeError(error);
+    const errorId = `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    return {
+      hasError: true,
+      error: appError,
+      errorId,
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
-    this.props.onError?.(error, errorInfo);
+    const appError = normalizeError(error);
+    appError.context.component = 'ErrorBoundary';
+
+    // Report error
+    reportError(appError);
+
+    // Call custom error handler
+    this.props.onError?.(appError, errorInfo);
+
+    // Log error details in development
+    if (import.meta.env.DEV) {
+      console.group('🚨 Error Boundary Caught Error');
+      console.error('Error:', error);
+      console.error('Error Info:', errorInfo);
+      console.error('App Error:', appError);
+      console.groupEnd();
+    }
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState({ hasError: false, error: undefined, errorId: undefined });
   };
 
   handleReload = () => {
@@ -75,6 +99,11 @@ class ErrorBoundary extends Component<Props, State> {
                   <p className="text-sm text-slate-300 font-mono">
                     {this.state.error.message}
                   </p>
+                  {import.meta.env.DEV && this.state.errorId && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      Error ID: {this.state.errorId}
+                    </p>
+                  )}
                 </div>
               )}
 

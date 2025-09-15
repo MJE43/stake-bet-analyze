@@ -1,10 +1,7 @@
 import { useMemo, useEffect, useRef, useCallback } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  liveStreamsApi,
-  type BetRecord,
-  type StreamBetsFilters,
-} from "@/lib/api";
+import { liveStreamsApi } from "@/lib/api/streams";
+import type { BetRecord, StreamBetsFilters } from "@/lib/api/types";
 
 export interface UseStreamBetsQueryOptions {
   streamId: string;

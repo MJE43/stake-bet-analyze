@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { liveStreamsApi, type StreamSummary, type StreamListFilters } from '@/lib/api';
+import { liveStreamsApi } from "@/lib/api/streams";
+import type { StreamSummary, StreamListFilters } from "@/lib/api/types";
 
 export interface UseLiveStreamsOptions {
   filters?: StreamListFilters;

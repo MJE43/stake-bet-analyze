@@ -31,14 +31,14 @@ export function useStreamDetail(options: UseStreamDetailOptions): UseStreamDetai
     },
     enabled: enabled && !!streamId,
     refetchInterval,
-    staleTime: 10 * 1000, // Consider data stale after 10 seconds for real-time updates
-    gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
-    retry: (failureCount, error) => {
-      // Retry up to 3 times for network errors, but not for 4xx errors
-      if (failureCount >= 3) return false;
-      const status = (error as any)?.apiError?.status;
-      return !status || status >= 500;
-    },
+     staleTime: 10 * 1000, // Consider data stale after 10 seconds for real-time updates
+     gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
+     retry: (failureCount, error: Error | unknown) => {
+       // Retry up to 3 times for network errors, but not for 4xx errors
+       if (failureCount >= 3) return false;
+       const status = (error as Error & { apiError?: { status?: number } })?.apiError?.status;
+       return !status || status >= 500;
+     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
@@ -46,7 +46,7 @@ export function useStreamDetail(options: UseStreamDetailOptions): UseStreamDetai
     stream: query.data || null,
     isLoading: query.isLoading,
     isError: query.isError,
-    error: query.error,
+    error: query.error as Error | null,
     refetch: query.refetch,
     isFetching: query.isFetching,
   };
@@ -84,14 +84,14 @@ export function useStreamBets(options: UseStreamBetsOptions): UseStreamBetsResul
     },
     enabled: enabled && !!streamId,
     refetchInterval,
-    staleTime: 5 * 1000, // Consider data stale after 5 seconds for bet updates
-    gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
-    retry: (failureCount, error) => {
-      // Retry up to 3 times for network errors, but not for 4xx errors
-      if (failureCount >= 3) return false;
-      const status = (error as any)?.apiError?.status;
-      return !status || status >= 500;
-    },
+     staleTime: 5 * 1000, // Consider data stale after 5 seconds for bet updates
+     gcTime: 2 * 60 * 1000, // Keep in cache for 2 minutes
+     retry: (failureCount, error: Error | unknown) => {
+       // Retry up to 3 times for network errors, but not for 4xx errors
+       if (failureCount >= 3) return false;
+       const status = (error as Error & { apiError?: { status?: number } })?.apiError?.status;
+       return !status || status >= 500;
+     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
@@ -100,7 +100,7 @@ export function useStreamBets(options: UseStreamBetsOptions): UseStreamBetsResul
     total: query.data?.total || 0,
     isLoading: query.isLoading,
     isError: query.isError,
-    error: query.error,
+    error: query.error as Error | null,
     refetch: query.refetch,
     isFetching: query.isFetching,
   };
@@ -128,7 +128,7 @@ export function useStreamDetailPage(streamId: string, betsFilters?: StreamBetsFi
     totalBets: streamBets.total,
     isLoading: streamDetail.isLoading || streamBets.isLoading,
     isError: streamDetail.isError || streamBets.isError,
-    error: streamDetail.error || streamBets.error,
+    error: (streamDetail.error || streamBets.error) as Error | null,
     isFetching: streamDetail.isFetching || streamBets.isFetching,
     refetchStream: streamDetail.refetch,
     refetchBets: streamBets.refetch,

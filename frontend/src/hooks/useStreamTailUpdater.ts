@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   liveStreamsApi,
@@ -62,23 +62,26 @@ export function useStreamTailUpdater(
     // Use max id as lastId (consistent with id_desc ordering)
     let maxId = 0;
     for (let i = 0; i < bets.length; i += 1) {
-      const id = bets[i].id;
-      if (id > maxId) maxId = id;
+      const id = bets[i]?.id;
+      if (id && id > maxId) maxId = id;
     }
     return maxId;
   };
 
   // Merge and trim bets into cache
-  const mergeDedupTrim = (oldData: { bets: BetRecord[]; total: number } | undefined, incoming: BetRecord[]) => {
+  const mergeDedupTrim = useCallback((oldData: { bets: BetRecord[]; total: number } | undefined, incoming: BetRecord[]) => {
     const existing = oldData?.bets ?? [];
 
     // Deduplicate
     const seen = new Set<number>();
-    for (let i = 0; i < existing.length; i += 1) seen.add(existing[i].id);
-    const uniqueIncoming = incoming.filter((b) => !seen.has(b.id));
+    for (let i = 0; i < existing.length; i += 1) {
+      const id = existing[i]?.id;
+      if (id) seen.add(id);
+    }
+    const uniqueIncoming = incoming.filter((b) => b.id && !seen.has(b.id));
 
     if (uniqueIncoming.length === 0)
-      return oldData ?? { bets: existing, total: oldData?.total ?? existing.length };
+      return oldData ?? { bets: existing, total: existing.length };
 
     // Prepend new then existing for id_desc default
     let merged = [...uniqueIncoming, ...existing];
@@ -116,12 +119,17 @@ export function useStreamTailUpdater(
       );
       return response.data;
     },
-    onSuccess: (data) => {
+  });
+
+  // Handle success in useEffect
+  useEffect(() => {
+    const data = query.data;
+    if (data) {
       const incoming = data?.bets ?? [];
       if (incoming.length === 0) return;
 
       // Merge into the bets cache for this stream
-      queryClient.setQueryData(["streamBets", streamId, mergedFilters], (old: any) =>
+      queryClient.setQueryData(["streamBets", streamId, mergedFilters], (old: { bets: BetRecord[]; total: number } | undefined) =>
         mergeDedupTrim(old, incoming)
       );
 
@@ -132,12 +140,12 @@ export function useStreamTailUpdater(
       if (onNewBets) {
         onNewBets(incoming);
       }
-    },
-  });
+    }
+  }, [query.data, streamId, mergedFilters, queryClient, onNewBets]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   return {
     isFetching: query.isFetching,
     isError: query.isError,
-    error: (query.error as Error) ?? null,
+    error: query.error as Error | null,
   };
 }

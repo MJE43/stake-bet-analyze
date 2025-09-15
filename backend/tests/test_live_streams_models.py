@@ -5,13 +5,14 @@ Tests LiveStream, LiveBet, and SeedAlias model validation,
 constraint testing for database fields, and relationship integrity.
 """
 
-import pytest
-from datetime import datetime, timezone
-from uuid import uuid4, UUID
-from sqlmodel import SQLModel, Session, create_engine, select
-from sqlalchemy.exc import IntegrityError
+from datetime import datetime
+from uuid import UUID, uuid4
 
-from app.models.live_streams import LiveStream, LiveBet, SeedAlias
+import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from app.models.live_streams import LiveBet, LiveStream, SeedAlias
 
 
 @pytest.fixture
@@ -49,7 +50,7 @@ class TestLiveStreamModel:
         stream = LiveStream(
             server_seed_hashed="abc123def456",
             client_seed="test_client_seed",
-            notes="Test stream notes"
+            notes="Test stream notes",
         )
 
         test_session.add(stream)
@@ -66,10 +67,7 @@ class TestLiveStreamModel:
 
     def test_stream_defaults(self, test_session):
         """Test that default values are set correctly."""
-        stream = LiveStream(
-            server_seed_hashed="test_hash",
-            client_seed="test_client"
-        )
+        stream = LiveStream(server_seed_hashed="test_hash", client_seed="test_client")
 
         test_session.add(stream)
         test_session.commit()
@@ -83,18 +81,12 @@ class TestLiveStreamModel:
     def test_unique_seed_pair_constraint(self, test_session):
         """Test that seed pair uniqueness is enforced."""
         # Create first stream
-        stream1 = LiveStream(
-            server_seed_hashed="same_hash",
-            client_seed="same_client"
-        )
+        stream1 = LiveStream(server_seed_hashed="same_hash", client_seed="same_client")
         test_session.add(stream1)
         test_session.commit()
 
         # Try to create second stream with same seed pair
-        stream2 = LiveStream(
-            server_seed_hashed="same_hash",
-            client_seed="same_client"
-        )
+        stream2 = LiveStream(server_seed_hashed="same_hash", client_seed="same_client")
         test_session.add(stream2)
 
         with pytest.raises(IntegrityError) as exc_info:
@@ -104,17 +96,14 @@ class TestLiveStreamModel:
 
     def test_different_seed_pairs_allowed(self, test_session):
         """Test that different seed pairs can coexist."""
-        stream1 = LiveStream(
-            server_seed_hashed="hash1",
-            client_seed="client1"
-        )
+        stream1 = LiveStream(server_seed_hashed="hash1", client_seed="client1")
         stream2 = LiveStream(
             server_seed_hashed="hash2",
-            client_seed="client1"  # Same client, different server
+            client_seed="client1",  # Same client, different server
         )
         stream3 = LiveStream(
             server_seed_hashed="hash1",
-            client_seed="client2"  # Same server, different client
+            client_seed="client2",  # Same server, different client
         )
 
         test_session.add_all([stream1, stream2, stream3])
@@ -148,10 +137,7 @@ class TestLiveBetModel:
     @pytest.fixture
     def sample_stream(self, test_session):
         """Create a sample stream for bet testing."""
-        stream = LiveStream(
-            server_seed_hashed="test_hash",
-            client_seed="test_client"
-        )
+        stream = LiveStream(server_seed_hashed="test_hash", client_seed="test_client")
         test_session.add(stream)
         test_session.commit()
         return stream
@@ -440,14 +426,8 @@ class TestLiveBetModel:
     def test_same_bet_id_different_streams_allowed(self, test_session):
         """Test that same antebot_bet_id can exist in different streams."""
         # Create two streams
-        stream1 = LiveStream(
-            server_seed_hashed="hash1",
-            client_seed="client1"
-        )
-        stream2 = LiveStream(
-            server_seed_hashed="hash2",
-            client_seed="client2"
-        )
+        stream1 = LiveStream(server_seed_hashed="hash1", client_seed="client1")
+        stream2 = LiveStream(server_seed_hashed="hash2", client_seed="client2")
         test_session.add_all([stream1, stream2])
         test_session.commit()
 
@@ -485,8 +465,7 @@ class TestSeedAliasModel:
     def test_create_valid_seed_alias(self, test_session):
         """Test creating a valid SeedAlias."""
         alias = SeedAlias(
-            server_seed_hashed="abc123def456",
-            server_seed_plain="plain_seed_text"
+            server_seed_hashed="abc123def456", server_seed_plain="plain_seed_text"
         )
 
         test_session.add(alias)
@@ -501,8 +480,7 @@ class TestSeedAliasModel:
     def test_seed_alias_defaults(self, test_session):
         """Test that default timestamps are set correctly."""
         alias = SeedAlias(
-            server_seed_hashed="test_hash",
-            server_seed_plain="test_plain"
+            server_seed_hashed="test_hash", server_seed_plain="test_plain"
         )
 
         test_session.add(alias)
@@ -515,18 +493,12 @@ class TestSeedAliasModel:
     def test_unique_hashed_seed_constraint(self, test_session):
         """Test that server_seed_hashed must be unique."""
         # Create first alias
-        alias1 = SeedAlias(
-            server_seed_hashed="unique_hash",
-            server_seed_plain="plain1"
-        )
+        alias1 = SeedAlias(server_seed_hashed="unique_hash", server_seed_plain="plain1")
         test_session.add(alias1)
         test_session.commit()
 
         # Try to create second alias with same hash
-        alias2 = SeedAlias(
-            server_seed_hashed="unique_hash",
-            server_seed_plain="plain2"
-        )
+        alias2 = SeedAlias(server_seed_hashed="unique_hash", server_seed_plain="plain2")
         test_session.add(alias2)
 
         with pytest.raises(IntegrityError) as exc_info:
@@ -558,8 +530,7 @@ class TestRelationshipIntegrity:
         """Test that deleting a stream cascades to delete all associated bets."""
         # Create stream
         stream = LiveStream(
-            server_seed_hashed="cascade_test",
-            client_seed="cascade_client"
+            server_seed_hashed="cascade_test", client_seed="cascade_client"
         )
         test_session.add(stream)
         test_session.commit()
@@ -623,8 +594,7 @@ class TestRelationshipIntegrity:
         """Test querying bets through stream relationship."""
         # Create stream
         stream = LiveStream(
-            server_seed_hashed="relationship_test",
-            client_seed="relationship_client"
+            server_seed_hashed="relationship_test", client_seed="relationship_client"
         )
         test_session.add(stream)
         test_session.commit()

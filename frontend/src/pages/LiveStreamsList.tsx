@@ -113,7 +113,7 @@ const LiveStreamsList = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-slate-900/50 p-3 rounded border border-slate-700">
-                <p className="text-red-300 text-sm">{error.message}</p>
+                <p className="text-red-300 text-sm">{(error as Error).message}</p>
               </div>
               
               <div className="bg-slate-900/30 p-3 rounded border border-slate-700">

@@ -3,46 +3,39 @@
 ## Build/Lint/Test Commands
 
 ### Frontend (cd frontend)
-- Dev: `npm run dev` (Vite on port 5173)
-- Build: `npm run build` (tsc + vite build)
-- Lint: `npm run lint` (ESLint on .)
-- Test all: `npm run test` (Vitest watch/UI) or `npm run test:run` (once)
-- Single test: `npx vitest src/path/to/test.tsx` (or `--run` for once)
+- Dev: `npm run dev` (Vite port 5173)
+- Build: `npm run build` (tsc + vite)
+- Lint: `npm run lint` (ESLint)
+- Test all: `npm run test` (Vitest) or `npm run test:run` (once)
+- Single test: `npx vitest src/path/to/test.tsx --run`
 
 ### Backend (cd backend)
-- Dev: `python start_server.py` (uvicorn on 8000)
-- Test all: `pytest` (async, verbose, short traces)
-- Single test: `pytest tests/test_specific.py` (or `::test_func`)
-- Lint: Use black/ruff if installed; follow PEP8/snake_case
+- Dev: `python start_server.py` (uvicorn port 8000)
+- Test all: `pytest` (async, verbose)
+- Single test: `pytest tests/test_specific.py::test_func`
+- Lint: `black . && ruff check .` (PEP8)
+- Typecheck: `mypy .`
 - Migrations: `python run_migration.py`
 
-## Code Style Guidelines (from .cursor/rules)
+## Code Style Guidelines
 
 ### General
-- **Naming**: Backend: snake_case files/vars, PascalCase classes. Frontend: PascalCase components/pages, camelCase hooks/vars, kebab-case CSS.
-- **Imports**: Backend: relative (from .models import). Frontend: @/src alias (import { Button } from '@/components/ui/button').
-- **Types**: Backend: SQLModel/Pydantic for models/schemas. Frontend: Strict TypeScript; infer from Zod; shared types in src/types.
-- **Formatting**: Frontend: ESLint + Prettier (via config.js). Backend: PEP8, 88-char lines; no explicit formatter in reqs.txt.
+- **Naming**: Backend: snake_case (files/vars), PascalCase (classes). Frontend: PascalCase (components), camelCase (hooks/vars)
+- **Imports**: Backend: relative. Frontend: @/src alias
+- **Types**: Backend: SQLModel/Pydantic. Frontend: Strict TS, Zod validation
+- **Formatting**: Frontend: ESLint. Backend: Black/Ruff, 88-char lines
 
-### Backend (FastAPI/Python)
-- **Structure**: Routers per feature (app/routers/); models/schemas separate; async/await everywhere.
-- **Error Handling**: Custom exceptions (e.g., ValidationError); HTTP 422/404/429; structured JSON responses with type/code/message.
-- **API**: Pagination (limit/offset); status 201 for POST; rate limiting on ingest; token auth via Header.
-- **Database**: AsyncSession via Depends; select() queries; no raw SQL.
+### Backend (FastAPI)
+- Structure: Routers per feature (app/routers/), models/schemas separate, async/await
+- Error Handling: Custom exceptions, HTTP 422/404/429, structured JSON responses
+- API: Pagination, 201 POST, rate limiting, token auth
+- Database: AsyncSession, select() queries, no raw SQL
 
 ### Frontend (React/TS)
-- **Components**: PascalCase; props interfaces first (required then optional); composition over inheritance; cn() for Tailwind.
-- **Hooks**: Custom for logic (useStreams); TanStack Query for data; useState/useReducer for local state.
-- **Forms**: React Hook Form + Zod; error display per field.
-- **Error Handling**: ErrorBoundary class; query onError with toast; AxiosError typing.
-- **Testing**: Vitest + RTL; renderHook for hooks; mock API; golden vectors for engine.
+- Components: PascalCase, props interfaces (required first), composition, cn() Tailwind
+- Hooks: Custom logic, TanStack Query for data, useState/useReducer for local
+- Forms: React Hook Form + Zod, per-field errors
+- Error Handling: ErrorBoundary, query onError with toast
+- Testing: Vitest + RTL, renderHook, mock API, golden vectors
 
-### Cursor Rules Integration
-- Follow tech-stack.mdc: React 19, FastAPI, Tailwind/Radix, TanStack Query/Table.
-- Structure.mdc: Layered (pages > components > ui); no generic names.
-- Frontend-patterns.mdc: Memoization (React.memo/useMemo); responsive Tailwind.
-- Testing-requirements.mdc: Golden vector tests (expert: 11200.65x); determinism; perf <10s/200k nonces.
-- Error-handling.mdc: Exception hierarchy; structured logging; boundaries.
-- API-conventions.mdc: Router tags; Pydantic validators; async patterns.
-
-Run lint/typecheck after changes: `npm run lint` (frontend), `pytest` (backend tests as proxy).
+Run lint/typecheck after changes: `npm run lint` (frontend), `mypy . && pytest` (backend)

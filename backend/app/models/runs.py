@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlmodel import SQLModel, Field, Index
-from sqlalchemy import ForeignKeyConstraint, CheckConstraint
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint
+from sqlmodel import Field, Index, SQLModel
 
 
 class Run(SQLModel, table=True):
@@ -37,7 +35,7 @@ class Run(SQLModel, table=True):
 class Hit(SQLModel, table=True):
     __tablename__ = "hits"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     run_id: UUID = Field(nullable=False)
     nonce: int = Field(nullable=False)
     max_multiplier: float = Field(nullable=False)

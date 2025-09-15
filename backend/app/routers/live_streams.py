@@ -1,64 +1,63 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-import asyncio
-from typing import Optional, Literal, List
-from uuid import UUID
-
 import csv
 import io
 import json
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, Query, status
+from datetime import UTC, datetime
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlmodel import select, func
 from sqlalchemy import text, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import func, select
 
 from ..core.config import get_settings
 from ..core.rate_limiter import rate_limit_dependency
 from ..db import get_session
-from ..models.live_streams import LiveStream, LiveBet, LiveBookmark, LiveSnapshot
+from ..models.live_streams import LiveBet, LiveBookmark, LiveSnapshot, LiveStream
 from ..schemas.live_streams import (
-    IngestBetRequest,
-    IngestResponse,
-    StreamListResponse,
-    StreamSummary,
-    StreamDetail,
+    BatchHitQueryResponse,
     BetListResponse,
     BetRecord,
-    TailResponse,
-    StreamUpdateRequest,
-    StreamDeleteResponse,
     BookmarkCreate,
-    BookmarkUpdate,
     BookmarkResponse,
-    SnapshotCreate,
-    SnapshotResponse,
-    SnapshotDeleteResponse,
-    StreamMetrics,
+    BookmarkUpdate,
+    BucketStats,
+    GlobalHitStatsResponse,
+    HitQueryResponse,
+    HitRecord,
+    HitStatsResponse,
+    IngestBetRequest,
+    IngestResponse,
     MultiplierMetrics,
     PeakRecord,
-    HitRecord,
-    HitQueryResponse,
-    BucketStats,
     RangeStats,
-    HitStatsResponse,
-    GlobalHitStatsResponse,
-    BatchHitQueryResponse,
+    SnapshotCreate,
+    SnapshotDeleteResponse,
+    SnapshotResponse,
+    StreamDeleteResponse,
+    StreamDetail,
+    StreamListResponse,
+    StreamMetrics,
+    StreamSummary,
+    StreamUpdateRequest,
+    TailResponse,
 )
 
 
 def uuid_to_db_format(uuid_obj: UUID) -> str:
     """Convert UUID to database format (without hyphens)."""
-    return str(uuid_obj).replace('-', '')
+    return str(uuid_obj).replace("-", "")
 
 
 router = APIRouter(prefix="/live", tags=["live-streams"])
 
 
 def verify_ingest_token(
-    x_ingest_token: Optional[str] = Header(None, alias="X-Ingest-Token")
+    x_ingest_token: str | None = Header(None, alias="X-Ingest-Token")
 ) -> None:
     """Verify the ingest token if configured."""
     settings = get_settings()
@@ -71,14 +70,13 @@ def verify_ingest_token(
     if x_ingest_token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-Ingest-Token header is required"
+            detail="X-Ingest-Token header is required",
         )
 
     # If token doesn't match, reject
     if x_ingest_token != settings.ingest_token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid ingest token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ingest token"
         )
 
 
@@ -93,7 +91,7 @@ async def ingest_bet(
     bet_data: IngestBetRequest,
     session: AsyncSession = Depends(get_session),
     _: None = Depends(verify_ingest_token),
-    __: None = Depends(get_rate_limit_dependency())
+    __: None = Depends(get_rate_limit_dependency()),
 ) -> IngestResponse:
     """
     Ingest bet data from Antebot with automatic stream management.
@@ -106,9 +104,9 @@ async def ingest_bet(
         if bet_data.dateTime:
             try:
                 # Parse ISO datetime string and ensure UTC
-                if bet_data.dateTime.endswith('Z'):
+                if bet_data.dateTime.endswith("Z"):
                     # Replace Z with +00:00 for proper ISO parsing
-                    datetime_str = bet_data.dateTime.replace('Z', '+00:00')
+                    datetime_str = bet_data.dateTime.replace("Z", "+00:00")
                 else:
                     datetime_str = bet_data.dateTime
 
@@ -116,10 +114,10 @@ async def ingest_bet(
 
                 if parsed_datetime.tzinfo is None:
                     # Assume UTC if no timezone info
-                    parsed_datetime = parsed_datetime.replace(tzinfo=timezone.utc)
+                    parsed_datetime = parsed_datetime.replace(tzinfo=UTC)
 
                 # Convert to UTC and remove timezone info for storage
-                parsed_datetime = parsed_datetime.astimezone(timezone.utc).replace(tzinfo=None)
+                parsed_datetime = parsed_datetime.astimezone(UTC).replace(tzinfo=None)
             except (ValueError, TypeError):
                 # On parsing failure, set to null and continue
                 parsed_datetime = None
@@ -127,7 +125,7 @@ async def ingest_bet(
         # Find or create stream for this seed pair
         stream_query = select(LiveStream).where(
             LiveStream.server_seed_hashed == bet_data.serverSeedHashed,
-            LiveStream.client_seed == bet_data.clientSeed
+            LiveStream.client_seed == bet_data.clientSeed,
         )
         result = await session.execute(stream_query)
         stream = result.scalar_one_or_none()
@@ -156,8 +154,7 @@ async def ingest_bet(
 
         # Check for duplicate bet (idempotent handling)
         duplicate_query = select(LiveBet).where(
-            LiveBet.stream_id == stream.id,
-            LiveBet.antebot_bet_id == bet_data.id
+            LiveBet.stream_id == stream.id, LiveBet.antebot_bet_id == bet_data.id
         )
         duplicate_result = await session.execute(duplicate_query)
         existing_bet = duplicate_result.scalar_one_or_none()
@@ -212,72 +209,73 @@ async def ingest_bet(
     except IntegrityError as e:
         # Handle database constraint violations
         await session.rollback()
-        error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+        error_msg = str(e.orig) if hasattr(e, "orig") else str(e)
 
         # Check for specific constraint violations
         if "ck_live_bets_nonce_ge_1" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Nonce must be greater than or equal to 1"
+                detail="Nonce must be greater than or equal to 1",
             )
         elif "ck_live_bets_amount_ge_0" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Amount must be greater than or equal to 0"
+                detail="Amount must be greater than or equal to 0",
             )
         elif "ck_live_bets_payout_ge_0" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Payout must be greater than or equal to 0"
+                detail="Payout must be greater than or equal to 0",
             )
         elif "ck_live_bets_difficulty" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Difficulty must be one of: easy, medium, hard, expert"
+                detail="Difficulty must be one of: easy, medium, hard, expert",
             )
         elif "ck_live_bets_round_target_gt_0" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Round target must be greater than 0 if provided"
+                detail="Round target must be greater than 0 if provided",
             )
         elif "ck_live_bets_round_result_ge_0" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Round result must be greater than or equal to 0",
             )
-        elif "UNIQUE constraint failed" in error_msg or "unique constraint" in error_msg.lower():
+        elif (
+            "UNIQUE constraint failed" in error_msg
+            or "unique constraint" in error_msg.lower()
+        ):
             # This shouldn't happen due to our duplicate check, but handle it gracefully
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Bet with this ID already exists for this stream"
+                detail="Bet with this ID already exists for this stream",
             )
         else:
             # Generic constraint violation
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Data validation failed: constraint violation"
+                detail="Data validation failed: constraint violation",
             )
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         # Handle other database errors
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while processing request"
+            detail="Database error occurred while processing request",
         )
-    except Exception as e:
+    except Exception:
         # Handle any other unexpected errors
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while processing the request"
+            detail="An unexpected error occurred while processing the request",
         )
 
 
 @router.get("/streams", response_model=StreamListResponse)
 async def list_streams(
-    limit: int = 50,
-    offset: int = 0,
-    session: AsyncSession = Depends(get_session)
+    limit: int = 50, offset: int = 0, session: AsyncSession = Depends(get_session)
 ) -> StreamListResponse:
     """
     List all live streams with pagination and metadata aggregation.
@@ -287,20 +285,17 @@ async def list_streams(
     # Validate limit constraint (≤100)
     if limit > 100:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Limit cannot exceed 100"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Limit cannot exceed 100"
         )
 
     if limit < 1:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Limit must be at least 1"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Limit must be at least 1"
         )
 
     if offset < 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Offset cannot be negative"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Offset cannot be negative"
         )
 
     try:
@@ -315,7 +310,7 @@ async def list_streams(
             select(
                 LiveStream,
                 func.count(LiveBet.id).label("total_bets"),
-                func.max(LiveBet.round_result).label("highest_multiplier")
+                func.max(LiveBet.round_result).label("highest_multiplier"),
             )
             .outerjoin(LiveBet, LiveStream.id == LiveBet.stream_id)
             .group_by(LiveStream.id)
@@ -334,40 +329,38 @@ async def list_streams(
             total_bets = row[1] or 0  # bet count
             highest_multiplier = row[2]  # max multiplier (can be None)
 
-            streams.append(StreamSummary(
-                id=stream.id,
-                server_seed_hashed=stream.server_seed_hashed,
-                client_seed=stream.client_seed,
-                created_at=stream.created_at,
-                last_seen_at=stream.last_seen_at,
-                total_bets=total_bets,
-                highest_multiplier=highest_multiplier,
-                notes=stream.notes
-            ))
+            streams.append(
+                StreamSummary(
+                    id=stream.id,
+                    server_seed_hashed=stream.server_seed_hashed,
+                    client_seed=stream.client_seed,
+                    created_at=stream.created_at,
+                    last_seen_at=stream.last_seen_at,
+                    total_bets=total_bets,
+                    highest_multiplier=highest_multiplier,
+                    notes=stream.notes,
+                )
+            )
 
         return StreamListResponse(
-            streams=streams,
-            total=total_streams,
-            limit=limit,
-            offset=offset
+            streams=streams, total=total_streams, limit=limit, offset=offset
         )
 
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching streams"
+            detail="Database error occurred while fetching streams",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching streams"
+            detail="An unexpected error occurred while fetching streams",
         )
 
 
 @router.get("/streams/{stream_id}", response_model=StreamDetail)
 async def get_stream_detail(
-    stream_id: UUID,
-    session: AsyncSession = Depends(get_session)
+    stream_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> StreamDetail:
     """
     Get detailed information about a specific stream including statistics and recent activity.
@@ -381,7 +374,7 @@ async def get_stream_detail(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get aggregated statistics for this stream
@@ -389,7 +382,7 @@ async def get_stream_detail(
             func.count(LiveBet.id).label("total_bets"),
             func.max(LiveBet.round_result).label("highest_multiplier"),
             func.min(LiveBet.round_result).label("lowest_multiplier"),
-            func.avg(LiveBet.round_result).label("average_multiplier")
+            func.avg(LiveBet.round_result).label("average_multiplier"),
         ).where(LiveBet.stream_id == stream_id)
 
         stats_result = await session.execute(stats_query)
@@ -441,21 +434,21 @@ async def get_stream_detail(
             lowest_multiplier=lowest_multiplier,
             average_multiplier=average_multiplier,
             notes=stream.notes,
-            recent_bets=recent_bets
+            recent_bets=recent_bets,
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching stream details"
+            detail="Database error occurred while fetching stream details",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching stream details"
+            detail="An unexpected error occurred while fetching stream details",
         )
 
 
@@ -464,10 +457,10 @@ async def list_stream_bets(
     stream_id: UUID,
     limit: int = 100,
     offset: int = 0,
-    min_multiplier: Optional[float] = None,
+    min_multiplier: float | None = None,
     order: Literal["nonce_asc", "id_desc"] = "nonce_asc",
     include_distance: bool = False,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> BetListResponse:
     """
     List bets for a specific stream with filtering and pagination.
@@ -478,26 +471,23 @@ async def list_stream_bets(
     # Validate limit constraint (≤1000)
     if limit > 1000:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Limit cannot exceed 1000"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Limit cannot exceed 1000"
         )
 
     if limit < 1:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Limit must be at least 1"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Limit must be at least 1"
         )
 
     if offset < 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Offset cannot be negative"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Offset cannot be negative"
         )
 
     if min_multiplier is not None and min_multiplier < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="min_multiplier cannot be negative"
+            detail="min_multiplier cannot be negative",
         )
 
     try:
@@ -509,7 +499,7 @@ async def list_stream_bets(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         if include_distance:
@@ -518,7 +508,9 @@ async def list_stream_bets(
             if min_multiplier is not None:
                 min_multiplier_filter = f"AND round_result >= {min_multiplier}"
 
-            order_clause = "ORDER BY nonce ASC" if order == "nonce_asc" else "ORDER BY id DESC"
+            order_clause = (
+                "ORDER BY nonce ASC" if order == "nonce_asc" else "ORDER BY id DESC"
+            )
 
             # First get total count with filters
             count_query = text(
@@ -528,7 +520,9 @@ async def list_stream_bets(
                 WHERE stream_id = :stream_id {min_multiplier_filter}
             """
             )
-            count_result = await session.execute(count_query, {"stream_id": uuid_to_db_format(stream_id)})
+            count_result = await session.execute(
+                count_query, {"stream_id": uuid_to_db_format(stream_id)}
+            )
             total_bets = count_result.scalar_one()
 
             # Get bets with distance calculation
@@ -558,7 +552,11 @@ async def list_stream_bets(
 
             bets_result = await session.execute(
                 distance_query,
-                {"stream_id": uuid_to_db_format(stream_id), "limit": limit, "offset": offset},
+                {
+                    "stream_id": uuid_to_db_format(stream_id),
+                    "limit": limit,
+                    "offset": offset,
+                },
             )
             bet_records = bets_result.fetchall()
 
@@ -625,25 +623,21 @@ async def list_stream_bets(
                 )
 
         return BetListResponse(
-            bets=bets,
-            total=total_bets,
-            limit=limit,
-            offset=offset,
-            stream_id=stream_id
+            bets=bets, total=total_bets, limit=limit, offset=offset, stream_id=stream_id
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching bets"
+            detail="Database error occurred while fetching bets",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching bets"
+            detail="An unexpected error occurred while fetching bets",
         )
 
 
@@ -652,7 +646,7 @@ async def tail_stream_bets(
     stream_id: UUID,
     since_id: int,
     include_distance: bool = False,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> TailResponse:
     """
     Get incremental bet updates for a stream since a specific ID.
@@ -663,7 +657,7 @@ async def tail_stream_bets(
     if since_id < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="since_id cannot be negative"
+            detail="since_id cannot be negative",
         )
 
     try:
@@ -675,7 +669,7 @@ async def tail_stream_bets(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         if include_distance:
@@ -704,7 +698,8 @@ async def tail_stream_bets(
             )
 
             tail_result = await session.execute(
-                distance_query, {"stream_id": uuid_to_db_format(stream_id), "since_id": since_id}
+                distance_query,
+                {"stream_id": uuid_to_db_format(stream_id), "since_id": since_id},
             )
             new_bet_records = tail_result.fetchall()
 
@@ -733,10 +728,7 @@ async def tail_stream_bets(
             # Get new bets since the specified ID, ordered by id ASC (without distance)
             tail_query = (
                 select(LiveBet)
-                .where(
-                    LiveBet.stream_id == stream_id,
-                    LiveBet.id > since_id
-                )
+                .where(LiveBet.stream_id == stream_id, LiveBet.id > since_id)
                 .order_by(LiveBet.id.asc())
             )
 
@@ -774,28 +766,27 @@ async def tail_stream_bets(
         return TailResponse(
             bets=bets,
             last_id=last_id if bets else None,  # Only set last_id if we have new bets
-            has_more=has_more
+            has_more=has_more,
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching tail updates"
+            detail="Database error occurred while fetching tail updates",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching tail updates"
+            detail="An unexpected error occurred while fetching tail updates",
         )
 
 
 @router.delete("/streams/{stream_id}", response_model=StreamDeleteResponse)
 async def delete_stream(
-    stream_id: UUID,
-    session: AsyncSession = Depends(get_session)
+    stream_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> StreamDeleteResponse:
     """
     Delete a stream and all associated bets with cascade deletion.
@@ -812,11 +803,13 @@ async def delete_stream(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Count bets that will be deleted (for response information)
-        bet_count_query = select(func.count(LiveBet.id)).where(LiveBet.stream_id == stream_id)
+        bet_count_query = select(func.count(LiveBet.id)).where(
+            LiveBet.stream_id == stream_id
+        )
         bet_count_result = await session.execute(bet_count_query)
         bets_to_delete = bet_count_result.scalar_one()
 
@@ -825,9 +818,7 @@ async def delete_stream(
         await session.commit()
 
         return StreamDeleteResponse(
-            deleted=True,
-            stream_id=stream_id,
-            bets_deleted=bets_to_delete
+            deleted=True, stream_id=stream_id, bets_deleted=bets_to_delete
         )
 
     except HTTPException:
@@ -837,23 +828,23 @@ async def delete_stream(
     except SQLAlchemyError as e:
         await session.rollback()
         # Check for specific constraint violations that might prevent deletion
-        error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+        error_msg = str(e.orig) if hasattr(e, "orig") else str(e)
 
         if "foreign key constraint" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete stream due to foreign key constraints"
+                detail="Cannot delete stream due to foreign key constraints",
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error occurred while deleting stream"
+                detail="Database error occurred while deleting stream",
             )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while deleting stream"
+            detail="An unexpected error occurred while deleting stream",
         )
 
 
@@ -861,7 +852,7 @@ async def delete_stream(
 async def update_stream(
     stream_id: UUID,
     update_data: StreamUpdateRequest,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> StreamDetail:
     """
     Update stream notes and metadata.
@@ -878,7 +869,7 @@ async def update_stream(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Update notes if provided (None is allowed to clear notes)
@@ -888,7 +879,7 @@ async def update_stream(
             if len(sanitized_notes) > 1000:  # Reasonable limit for notes
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Notes cannot exceed 1000 characters"
+                    detail="Notes cannot exceed 1000 characters",
                 )
             stream.notes = sanitized_notes if sanitized_notes else None
 
@@ -902,7 +893,7 @@ async def update_stream(
             func.count(LiveBet.id).label("total_bets"),
             func.max(LiveBet.round_result).label("highest_multiplier"),
             func.min(LiveBet.round_result).label("lowest_multiplier"),
-            func.avg(LiveBet.round_result).label("average_multiplier")
+            func.avg(LiveBet.round_result).label("average_multiplier"),
         ).where(LiveBet.stream_id == stream_id)
 
         stats_result = await session.execute(stats_query)
@@ -954,7 +945,7 @@ async def update_stream(
             lowest_multiplier=lowest_multiplier,
             average_multiplier=average_multiplier,
             notes=stream.notes,
-            recent_bets=recent_bets
+            recent_bets=recent_bets,
         )
 
     except HTTPException:
@@ -963,31 +954,30 @@ async def update_stream(
         raise
     except SQLAlchemyError as e:
         await session.rollback()
-        error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+        error_msg = str(e.orig) if hasattr(e, "orig") else str(e)
 
         # Handle potential constraint violations or lock timeouts
         if "database is locked" in error_msg.lower() or "lock" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Stream is currently being updated by another request. Please try again."
+                detail="Stream is currently being updated by another request. Please try again.",
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error occurred while updating stream"
+                detail="Database error occurred while updating stream",
             )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while updating stream"
+            detail="An unexpected error occurred while updating stream",
         )
 
 
 @router.get("/streams/{stream_id}/export.csv")
 async def export_stream_csv(
-    stream_id: UUID,
-    session: AsyncSession = Depends(get_session)
+    stream_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> StreamingResponse:
     """
     Export all bets for a stream as CSV data.
@@ -1004,7 +994,7 @@ async def export_stream_csv(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get all bets for the stream ordered by nonce ASC (chronological)
@@ -1068,32 +1058,33 @@ async def export_stream_csv(
             media_type="text/csv",
             headers={
                 "Content-Disposition": f"attachment; filename={filename}",
-                "Content-Type": "text/csv; charset=utf-8"
-            }
+                "Content-Type": "text/csv; charset=utf-8",
+            },
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while exporting stream data"
+            detail="Database error occurred while exporting stream data",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while exporting stream data"
+            detail="An unexpected error occurred while exporting stream data",
         )
 
 
 # Bookmark endpoints
 
+
 @router.post("/streams/{stream_id}/bookmarks", response_model=BookmarkResponse)
 async def create_bookmark(
     stream_id: UUID,
     bookmark_data: BookmarkCreate,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> BookmarkResponse:
     """
     Create a new bookmark for a specific bet in a stream.
@@ -1107,7 +1098,7 @@ async def create_bookmark(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Verify the bet exists in the stream
@@ -1122,14 +1113,14 @@ async def create_bookmark(
         if bet is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Bet with nonce {bookmark_data.nonce} and multiplier {bookmark_data.multiplier} not found in stream"
+                detail=f"Bet with nonce {bookmark_data.nonce} and multiplier {bookmark_data.multiplier} not found in stream",
             )
 
         # Check if bookmark already exists
         existing_bookmark_query = select(LiveBookmark).where(
             LiveBookmark.stream_id == stream_id,
             LiveBookmark.nonce == bookmark_data.nonce,
-            LiveBookmark.multiplier == bookmark_data.multiplier
+            LiveBookmark.multiplier == bookmark_data.multiplier,
         )
         existing_result = await session.execute(existing_bookmark_query)
         existing_bookmark = existing_result.scalar_one_or_none()
@@ -1137,7 +1128,7 @@ async def create_bookmark(
         if existing_bookmark is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Bookmark already exists for this bet"
+                detail="Bookmark already exists for this bet",
             )
 
         # Create new bookmark
@@ -1146,7 +1137,7 @@ async def create_bookmark(
             nonce=bookmark_data.nonce,
             multiplier=bookmark_data.multiplier,
             note=bookmark_data.note,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
         )
 
         session.add(new_bookmark)
@@ -1159,31 +1150,30 @@ async def create_bookmark(
             nonce=new_bookmark.nonce,
             multiplier=new_bookmark.multiplier,
             note=new_bookmark.note,
-            created_at=new_bookmark.created_at
+            created_at=new_bookmark.created_at,
         )
 
     except HTTPException:
         await session.rollback()
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while creating bookmark"
+            detail="Database error occurred while creating bookmark",
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while creating bookmark"
+            detail="An unexpected error occurred while creating bookmark",
         )
 
 
-@router.get("/streams/{stream_id}/bookmarks", response_model=List[BookmarkResponse])
+@router.get("/streams/{stream_id}/bookmarks", response_model=list[BookmarkResponse])
 async def list_bookmarks(
-    stream_id: UUID,
-    session: AsyncSession = Depends(get_session)
-) -> List[BookmarkResponse]:
+    stream_id: UUID, session: AsyncSession = Depends(get_session)
+) -> list[BookmarkResponse]:
     """
     List all bookmarks for a specific stream.
     """
@@ -1196,7 +1186,7 @@ async def list_bookmarks(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get all bookmarks for the stream ordered by created_at DESC
@@ -1217,22 +1207,22 @@ async def list_bookmarks(
                 nonce=bookmark.nonce,
                 multiplier=bookmark.multiplier,
                 note=bookmark.note,
-                created_at=bookmark.created_at
+                created_at=bookmark.created_at,
             )
             for bookmark in bookmarks
         ]
 
     except HTTPException:
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching bookmarks"
+            detail="Database error occurred while fetching bookmarks",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching bookmarks"
+            detail="An unexpected error occurred while fetching bookmarks",
         )
 
 
@@ -1240,7 +1230,7 @@ async def list_bookmarks(
 async def update_bookmark(
     bookmark_id: int,
     update_data: BookmarkUpdate,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> BookmarkResponse:
     """
     Update a bookmark's note.
@@ -1254,7 +1244,7 @@ async def update_bookmark(
         if bookmark is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Bookmark with ID {bookmark_id} not found"
+                detail=f"Bookmark with ID {bookmark_id} not found",
             )
 
         # Update the note
@@ -1270,30 +1260,29 @@ async def update_bookmark(
             nonce=bookmark.nonce,
             multiplier=bookmark.multiplier,
             note=bookmark.note,
-            created_at=bookmark.created_at
+            created_at=bookmark.created_at,
         )
 
     except HTTPException:
         await session.rollback()
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while updating bookmark"
+            detail="Database error occurred while updating bookmark",
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while updating bookmark"
+            detail="An unexpected error occurred while updating bookmark",
         )
 
 
 @router.delete("/live/bookmarks/{bookmark_id}")
 async def delete_bookmark(
-    bookmark_id: int,
-    session: AsyncSession = Depends(get_session)
+    bookmark_id: int, session: AsyncSession = Depends(get_session)
 ) -> dict:
     """
     Delete a bookmark.
@@ -1307,7 +1296,7 @@ async def delete_bookmark(
         if bookmark is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Bookmark with ID {bookmark_id} not found"
+                detail=f"Bookmark with ID {bookmark_id} not found",
             )
 
         # Delete the bookmark
@@ -1319,27 +1308,28 @@ async def delete_bookmark(
     except HTTPException:
         await session.rollback()
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while deleting bookmark"
+            detail="Database error occurred while deleting bookmark",
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while deleting bookmark"
+            detail="An unexpected error occurred while deleting bookmark",
         )
 
 
 # Snapshot endpoints
 
+
 @router.post("/streams/{stream_id}/snapshots", response_model=SnapshotResponse)
 async def create_snapshot(
     stream_id: UUID,
     snapshot_data: SnapshotCreate,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> SnapshotResponse:
     """
     Create a new snapshot for a stream with current filter state.
@@ -1353,13 +1343,13 @@ async def create_snapshot(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Validate that the last_id_checkpoint exists in the stream
         checkpoint_query = select(LiveBet).where(
             LiveBet.stream_id == stream_id,
-            LiveBet.id == snapshot_data.last_id_checkpoint
+            LiveBet.id == snapshot_data.last_id_checkpoint,
         )
         checkpoint_result = await session.execute(checkpoint_query)
         checkpoint_bet = checkpoint_result.scalar_one_or_none()
@@ -1367,7 +1357,7 @@ async def create_snapshot(
         if checkpoint_bet is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Checkpoint ID {snapshot_data.last_id_checkpoint} not found in stream"
+                detail=f"Checkpoint ID {snapshot_data.last_id_checkpoint} not found in stream",
             )
 
         # Create new snapshot
@@ -1376,7 +1366,7 @@ async def create_snapshot(
             name=snapshot_data.name,
             filter_state=json.dumps(snapshot_data.filter_state),
             last_id_checkpoint=snapshot_data.last_id_checkpoint,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
         )
 
         session.add(new_snapshot)
@@ -1389,7 +1379,7 @@ async def create_snapshot(
             name=new_snapshot.name,
             filter_state=json.loads(new_snapshot.filter_state),
             last_id_checkpoint=new_snapshot.last_id_checkpoint,
-            created_at=new_snapshot.created_at
+            created_at=new_snapshot.created_at,
         )
 
     except HTTPException:
@@ -1399,27 +1389,26 @@ async def create_snapshot(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid filter_state JSON format"
+            detail="Invalid filter_state JSON format",
         )
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while creating snapshot"
+            detail="Database error occurred while creating snapshot",
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while creating snapshot"
+            detail="An unexpected error occurred while creating snapshot",
         )
 
 
-@router.get("/streams/{stream_id}/snapshots", response_model=List[SnapshotResponse])
+@router.get("/streams/{stream_id}/snapshots", response_model=list[SnapshotResponse])
 async def list_snapshots(
-    stream_id: UUID,
-    session: AsyncSession = Depends(get_session)
-) -> List[SnapshotResponse]:
+    stream_id: UUID, session: AsyncSession = Depends(get_session)
+) -> list[SnapshotResponse]:
     """
     List all snapshots for a specific stream.
     """
@@ -1432,7 +1421,7 @@ async def list_snapshots(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get all snapshots for the stream ordered by created_at DESC
@@ -1453,7 +1442,7 @@ async def list_snapshots(
                 name=snapshot.name,
                 filter_state=json.loads(snapshot.filter_state),
                 last_id_checkpoint=snapshot.last_id_checkpoint,
-                created_at=snapshot.created_at
+                created_at=snapshot.created_at,
             )
             for snapshot in snapshots
         ]
@@ -1463,25 +1452,26 @@ async def list_snapshots(
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid filter_state data in database"
+            detail="Invalid filter_state data in database",
         )
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching snapshots"
+            detail="Database error occurred while fetching snapshots",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching snapshots"
+            detail="An unexpected error occurred while fetching snapshots",
         )
 
 
-@router.get("/streams/{stream_id}/snapshots/{snapshot_id}/replay", response_model=BetListResponse)
+@router.get(
+    "/streams/{stream_id}/snapshots/{snapshot_id}/replay",
+    response_model=BetListResponse,
+)
 async def replay_snapshot(
-    stream_id: UUID,
-    snapshot_id: int,
-    session: AsyncSession = Depends(get_session)
+    stream_id: UUID, snapshot_id: int, session: AsyncSession = Depends(get_session)
 ) -> BetListResponse:
     """
     Replay snapshot data by returning bets up to the snapshot checkpoint with the saved filter state.
@@ -1495,13 +1485,12 @@ async def replay_snapshot(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get the snapshot
         snapshot_query = select(LiveSnapshot).where(
-            LiveSnapshot.id == snapshot_id,
-            LiveSnapshot.stream_id == stream_id
+            LiveSnapshot.id == snapshot_id, LiveSnapshot.stream_id == stream_id
         )
         snapshot_result = await session.execute(snapshot_query)
         snapshot = snapshot_result.scalar_one_or_none()
@@ -1509,7 +1498,7 @@ async def replay_snapshot(
         if snapshot is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Snapshot with ID {snapshot_id} not found in stream"
+                detail=f"Snapshot with ID {snapshot_id} not found in stream",
             )
 
         # Parse filter state
@@ -1518,21 +1507,24 @@ async def replay_snapshot(
         except json.JSONDecodeError:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid filter_state data in snapshot"
+                detail="Invalid filter_state data in snapshot",
             )
 
         # Build query for bets up to checkpoint
         base_query = select(LiveBet).where(
-            LiveBet.stream_id == stream_id,
-            LiveBet.id <= snapshot.last_id_checkpoint
+            LiveBet.stream_id == stream_id, LiveBet.id <= snapshot.last_id_checkpoint
         )
 
         # Apply filters from snapshot state
         if filter_state.get("min_multiplier") is not None:
-            base_query = base_query.where(LiveBet.round_result >= filter_state["min_multiplier"])
+            base_query = base_query.where(
+                LiveBet.round_result >= filter_state["min_multiplier"]
+            )
 
         if filter_state.get("difficulty") is not None:
-            base_query = base_query.where(LiveBet.difficulty == filter_state["difficulty"])
+            base_query = base_query.where(
+                LiveBet.difficulty == filter_state["difficulty"]
+            )
 
         # Get total count with filters applied
         count_query = select(func.count()).select_from(base_query.subquery())
@@ -1565,31 +1557,26 @@ async def replay_snapshot(
             )
 
         return BetListResponse(
-            bets=bets,
-            total=total_bets,
-            limit=len(bets),
-            offset=0,
-            stream_id=stream_id
+            bets=bets, total=total_bets, limit=len(bets), offset=0, stream_id=stream_id
         )
 
     except HTTPException:
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while replaying snapshot"
+            detail="Database error occurred while replaying snapshot",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while replaying snapshot"
+            detail="An unexpected error occurred while replaying snapshot",
         )
 
 
 @router.delete("/snapshots/{snapshot_id}", response_model=SnapshotDeleteResponse)
 async def delete_snapshot(
-    snapshot_id: int,
-    session: AsyncSession = Depends(get_session)
+    snapshot_id: int, session: AsyncSession = Depends(get_session)
 ) -> SnapshotDeleteResponse:
     """
     Delete a snapshot.
@@ -1603,7 +1590,7 @@ async def delete_snapshot(
         if snapshot is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Snapshot with ID {snapshot_id} not found"
+                detail=f"Snapshot with ID {snapshot_id} not found",
             )
 
         # Delete the snapshot
@@ -1615,28 +1602,28 @@ async def delete_snapshot(
     except HTTPException:
         await session.rollback()
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while deleting snapshot"
+            detail="Database error occurred while deleting snapshot",
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while deleting snapshot"
+            detail="An unexpected error occurred while deleting snapshot",
         )
 
 
 @router.get("/streams/{stream_id}/metrics", response_model=StreamMetrics)
 async def get_stream_metrics(
     stream_id: UUID,
-    multipliers: List[float] = Query([]),
+    multipliers: list[float] = Query([]),
     tolerance: float = Query(1e-9),
     bucket_size: int = Query(1000),
     top_peaks_limit: int = Query(20),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> StreamMetrics:
     """
     Get pre-aggregated analytics for pinned multipliers.
@@ -1647,19 +1634,19 @@ async def get_stream_metrics(
     if tolerance <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="tolerance must be greater than 0"
+            detail="tolerance must be greater than 0",
         )
 
     if bucket_size <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="bucket_size must be greater than 0"
+            detail="bucket_size must be greater than 0",
         )
 
     if top_peaks_limit <= 0 or top_peaks_limit > 100:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="top_peaks_limit must be between 1 and 100"
+            detail="top_peaks_limit must be between 1 and 100",
         )
 
     try:
@@ -1671,7 +1658,7 @@ async def get_stream_metrics(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get basic stream metrics
@@ -1709,12 +1696,7 @@ async def get_stream_metrics(
         top_peaks_rows = top_peaks_result.all()
 
         top_peaks = [
-            PeakRecord(
-                multiplier=row[0],
-                nonce=row[1],
-                timestamp=row[2],
-                id=row[3]
-            )
+            PeakRecord(multiplier=row[0], nonce=row[1], timestamp=row[2], id=row[3])
             for row in top_peaks_rows
         ]
 
@@ -1735,7 +1717,7 @@ async def get_stream_metrics(
 
             density_result = await session.execute(
                 density_query,
-                {"stream_id": uuid_to_db_format(stream_id), "bucket_size": bucket_size}
+                {"stream_id": uuid_to_db_format(stream_id), "bucket_size": bucket_size},
             )
 
             for row in density_result:
@@ -1764,8 +1746,8 @@ async def get_stream_metrics(
                     {
                         "stream_id": stream_id,
                         "multiplier": multiplier,
-                        "tolerance": tolerance
-                    }
+                        "tolerance": tolerance,
+                    },
                 )
 
                 multiplier_rows = multiplier_result.all()
@@ -1782,8 +1764,10 @@ async def get_stream_metrics(
                         max_gap = max(gaps)
 
                         # Calculate standard deviation
-                        variance = sum((gap - mean_gap) ** 2 for gap in gaps) / len(gaps)
-                        std_gap = variance ** 0.5
+                        variance = sum((gap - mean_gap) ** 2 for gap in gaps) / len(
+                            gaps
+                        )
+                        std_gap = variance**0.5
 
                         # Calculate p90 (approximate)
                         sorted_gaps = sorted(gaps)
@@ -1799,30 +1783,34 @@ async def get_stream_metrics(
                         max_gap = 0
                         eta_observed = float(last_nonce)
 
-                    multiplier_stats.append(MultiplierMetrics(
-                        multiplier=multiplier,
-                        count=count,
-                        last_nonce=last_nonce,
-                        mean_gap=mean_gap,
-                        std_gap=std_gap,
-                        p90_gap=p90_gap,
-                        max_gap=max_gap,
-                        eta_theoretical=None,  # Could be implemented with probability tables
-                        eta_observed=eta_observed
-                    ))
+                    multiplier_stats.append(
+                        MultiplierMetrics(
+                            multiplier=multiplier,
+                            count=count,
+                            last_nonce=last_nonce,
+                            mean_gap=mean_gap,
+                            std_gap=std_gap,
+                            p90_gap=p90_gap,
+                            max_gap=max_gap,
+                            eta_theoretical=None,  # Could be implemented with probability tables
+                            eta_observed=eta_observed,
+                        )
+                    )
                 else:
                     # No occurrences found for this multiplier
-                    multiplier_stats.append(MultiplierMetrics(
-                        multiplier=multiplier,
-                        count=0,
-                        last_nonce=0,
-                        mean_gap=0.0,
-                        std_gap=0.0,
-                        p90_gap=0.0,
-                        max_gap=0,
-                        eta_theoretical=None,
-                        eta_observed=0.0
-                    ))
+                    multiplier_stats.append(
+                        MultiplierMetrics(
+                            multiplier=multiplier,
+                            count=0,
+                            last_nonce=0,
+                            mean_gap=0.0,
+                            std_gap=0.0,
+                            p90_gap=0.0,
+                            max_gap=0,
+                            eta_theoretical=None,
+                            eta_observed=0.0,
+                        )
+                    )
 
         return StreamMetrics(
             stream_id=stream_id,
@@ -1831,21 +1819,21 @@ async def get_stream_metrics(
             hit_rate=hit_rate,
             multiplier_stats=multiplier_stats,
             density_buckets=density_buckets,
-            top_peaks=top_peaks
+            top_peaks=top_peaks,
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while calculating metrics"
+            detail="Database error occurred while calculating metrics",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while calculating metrics"
+            detail="An unexpected error occurred while calculating metrics",
         )
 
 
@@ -1854,15 +1842,19 @@ async def get_stream_hits(
     stream_id: UUID,
     bucket: float,
     after_nonce: int = Query(0, ge=0, description="Start nonce (inclusive)"),
-    before_nonce: Optional[int] = Query(None, ge=0, description="End nonce (exclusive)"),
-    limit: int = Query(500, ge=1, le=1000, description="Maximum number of hits to return"),
-    order: Literal["nonce_asc", "nonce_desc"] = Query("nonce_asc", description="Sort order"),
+    before_nonce: int | None = Query(None, ge=0, description="End nonce (exclusive)"),
+    limit: int = Query(
+        500, ge=1, le=1000, description="Maximum number of hits to return"
+    ),
+    order: Literal["nonce_asc", "nonce_desc"] = Query(
+        "nonce_asc", description="Sort order"
+    ),
     include_distance: bool = Query(True, description="Include distance calculations"),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ) -> HitQueryResponse:
     """
     Get hits for a specific multiplier bucket with server-side distance calculation.
-    
+
     Returns only bets that match the specified bucket (rounded to 2 decimal places)
     with proper distance calculations using LAG window function.
     """
@@ -1872,14 +1864,14 @@ async def get_stream_hits(
         if bucket_2dp < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Bucket value cannot be negative"
+                detail="Bucket value cannot be negative",
             )
 
         # Validate range if before_nonce is specified
         if before_nonce is not None and after_nonce >= before_nonce:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="after_nonce must be less than before_nonce"
+                detail="after_nonce must be less than before_nonce",
             )
 
         # Verify stream exists
@@ -1890,12 +1882,14 @@ async def get_stream_hits(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Get max nonce if before_nonce not specified
         if before_nonce is None:
-            max_nonce_query = select(func.max(LiveBet.nonce)).where(LiveBet.stream_id == stream_id)
+            max_nonce_query = select(func.max(LiveBet.nonce)).where(
+                LiveBet.stream_id == stream_id
+            )
             max_nonce_result = await session.execute(max_nonce_query)
             before_nonce = max_nonce_result.scalar_one() or 0
 
@@ -1903,7 +1897,7 @@ async def get_stream_hits(
         if after_nonce >= before_nonce:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="after_nonce must be less than before_nonce"
+                detail="after_nonce must be less than before_nonce",
             )
 
         # Find previous nonce before range for distance calculation
@@ -1912,7 +1906,7 @@ async def get_stream_hits(
             prev_nonce_query = select(func.max(LiveBet.nonce)).where(
                 LiveBet.stream_id == stream_id,
                 LiveBet.bucket_2dp == bucket_2dp,
-                LiveBet.nonce < after_nonce
+                LiveBet.nonce < after_nonce,
             )
             prev_nonce_result = await session.execute(prev_nonce_query)
             prev_nonce_before_range = prev_nonce_result.scalar_one()
@@ -1922,16 +1916,19 @@ async def get_stream_hits(
             LiveBet.stream_id == stream_id,
             LiveBet.bucket_2dp == bucket_2dp,
             LiveBet.nonce >= after_nonce,
-            LiveBet.nonce < before_nonce
+            LiveBet.nonce < before_nonce,
         )
         count_result = await session.execute(count_query)
         total_in_range = count_result.scalar_one()
 
         if include_distance:
             # Build query with distance calculation using LAG window function
-            order_clause = "ORDER BY nonce ASC" if order == "nonce_asc" else "ORDER BY nonce DESC"
-            
-            hits_query = text(f"""
+            order_clause = (
+                "ORDER BY nonce ASC" if order == "nonce_asc" else "ORDER BY nonce DESC"
+            )
+
+            hits_query = text(
+                f"""
                 SELECT 
                     nonce,
                     bucket_2dp as bucket,
@@ -1945,15 +1942,19 @@ async def get_stream_hits(
                   AND nonce < :before_nonce
                 {order_clause}
                 LIMIT :limit
-            """)
+            """
+            )
 
-            hits_result = await session.execute(hits_query, {
-                "stream_id": uuid_to_db_format(stream_id),
-                "bucket_2dp": bucket_2dp,
-                "after_nonce": after_nonce,
-                "before_nonce": before_nonce,
-                "limit": limit
-            })
+            hits_result = await session.execute(
+                hits_query,
+                {
+                    "stream_id": uuid_to_db_format(stream_id),
+                    "bucket_2dp": bucket_2dp,
+                    "after_nonce": after_nonce,
+                    "before_nonce": before_nonce,
+                    "limit": limit,
+                },
+            )
             hit_records = hits_result.fetchall()
 
             # Convert to HitRecord format with distance
@@ -1964,20 +1965,22 @@ async def get_stream_hits(
                 if distance_prev is None and prev_nonce_before_range is not None:
                     distance_prev = row.nonce - prev_nonce_before_range
 
-                hits.append(HitRecord(
-                    nonce=row.nonce,
-                    bucket=row.bucket,
-                    distance_prev=distance_prev,
-                    id=row.id,
-                    date_time=row.date_time
-                ))
+                hits.append(
+                    HitRecord(
+                        nonce=row.nonce,
+                        bucket=row.bucket,
+                        distance_prev=distance_prev,
+                        id=row.id,
+                        date_time=row.date_time,
+                    )
+                )
         else:
             # Query without distance calculation
             base_query = select(LiveBet).where(
                 LiveBet.stream_id == stream_id,
                 LiveBet.bucket_2dp == bucket_2dp,
                 LiveBet.nonce >= after_nonce,
-                LiveBet.nonce < before_nonce
+                LiveBet.nonce < before_nonce,
             )
 
             # Add ordering
@@ -1995,13 +1998,15 @@ async def get_stream_hits(
             # Convert to HitRecord format without distance
             hits = []
             for bet in hit_records:
-                hits.append(HitRecord(
-                    nonce=bet.nonce,
-                    bucket=bet.bucket_2dp,
-                    distance_prev=None,
-                    id=bet.id,
-                    date_time=bet.date_time
-                ))
+                hits.append(
+                    HitRecord(
+                        nonce=bet.nonce,
+                        bucket=bet.bucket_2dp,
+                        distance_prev=None,
+                        id=bet.id,
+                        date_time=bet.date_time,
+                    )
+                )
 
         # Check if there are more records beyond the limit
         has_more = len(hits) == limit and total_in_range > limit
@@ -2010,21 +2015,21 @@ async def get_stream_hits(
             hits=hits,
             prev_nonce_before_range=prev_nonce_before_range,
             total_in_range=total_in_range,
-            has_more=has_more
+            has_more=has_more,
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching hits"
+            detail="Database error occurred while fetching hits",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching hits"
+            detail="An unexpected error occurred while fetching hits",
         )
 
 
@@ -2032,12 +2037,14 @@ async def get_stream_hits(
 async def get_hit_statistics(
     stream_id: UUID,
     bucket: float,
-    ranges: Optional[str] = Query(None, description="Comma-separated ranges (e.g., '0-10000,10000-20000')"),
-    session: AsyncSession = Depends(get_session)
+    ranges: str | None = Query(
+        None, description="Comma-separated ranges (e.g., '0-10000,10000-20000')"
+    ),
+    session: AsyncSession = Depends(get_session),
 ) -> HitStatsResponse:
     """
     Get hit statistics for a specific multiplier bucket across specified ranges.
-    
+
     Returns count, median, mean, min, max distance statistics using SQL aggregation
     with percentile_cont() for accurate medians.
     """
@@ -2047,7 +2054,7 @@ async def get_hit_statistics(
         if bucket_2dp < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Bucket value cannot be negative"
+                detail="Bucket value cannot be negative",
             )
 
         # Verify stream exists
@@ -2058,33 +2065,39 @@ async def get_hit_statistics(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Parse ranges if provided, otherwise use full range
         range_list = []
         if ranges:
             try:
-                for range_str in ranges.split(','):
+                for range_str in ranges.split(","):
                     range_str = range_str.strip()
-                    if '-' not in range_str:
+                    if "-" not in range_str:
                         raise ValueError(f"Invalid range format: {range_str}")
-                    start_str, end_str = range_str.split('-', 1)
+                    start_str, end_str = range_str.split("-", 1)
                     start_nonce = int(start_str.strip())
                     end_nonce = int(end_str.strip())
                     if start_nonce < 0 or end_nonce < 0:
-                        raise ValueError(f"Range values cannot be negative: {range_str}")
+                        raise ValueError(
+                            f"Range values cannot be negative: {range_str}"
+                        )
                     if start_nonce >= end_nonce:
-                        raise ValueError(f"Start nonce must be less than end nonce: {range_str}")
+                        raise ValueError(
+                            f"Start nonce must be less than end nonce: {range_str}"
+                        )
                     range_list.append((start_nonce, end_nonce, range_str))
             except ValueError as e:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid ranges parameter: {str(e)}"
+                    detail=f"Invalid ranges parameter: {str(e)}",
                 )
         else:
             # Use full range if no ranges specified
-            max_nonce_query = select(func.max(LiveBet.nonce)).where(LiveBet.stream_id == stream_id)
+            max_nonce_query = select(func.max(LiveBet.nonce)).where(
+                LiveBet.stream_id == stream_id
+            )
             max_nonce_result = await session.execute(max_nonce_query)
             max_nonce = max_nonce_result.scalar_one() or 0
             range_list = [(0, max_nonce, f"0-{max_nonce}")]
@@ -2094,7 +2107,8 @@ async def get_hit_statistics(
         for start_nonce, end_nonce, range_str in range_list:
             # Use a simpler approach for SQLite compatibility
             # Calculate distances between consecutive hits of the same bucket
-            stats_query = text("""
+            stats_query = text(
+                """
                 WITH ordered_hits AS (
                     SELECT 
                         nonce,
@@ -2116,14 +2130,18 @@ async def get_hit_statistics(
                     distance
                 FROM distances
                 ORDER BY distance
-            """)
+            """
+            )
 
-            stats_result = await session.execute(stats_query, {
-                "stream_id": uuid_to_db_format(stream_id),
-                "bucket_2dp": bucket_2dp,
-                "start_nonce": start_nonce,
-                "end_nonce": end_nonce
-            })
+            stats_result = await session.execute(
+                stats_query,
+                {
+                    "stream_id": uuid_to_db_format(stream_id),
+                    "bucket_2dp": bucket_2dp,
+                    "start_nonce": start_nonce,
+                    "end_nonce": end_nonce,
+                },
+            )
             distances = [row.distance for row in stats_result.fetchall()]
 
             if distances:
@@ -2132,65 +2150,59 @@ async def get_hit_statistics(
                 mean = sum(distances) / count
                 min_distance = min(distances)
                 max_distance = max(distances)
-                
+
                 # Calculate proper median
                 sorted_distances = sorted(distances)
                 if count % 2 == 0:
                     # Even number of elements - average of middle two
-                    median = (sorted_distances[count // 2 - 1] + sorted_distances[count // 2]) / 2
+                    median = (
+                        sorted_distances[count // 2 - 1] + sorted_distances[count // 2]
+                    ) / 2
                 else:
                     # Odd number of elements - middle element
                     median = sorted_distances[count // 2]
-                
+
                 bucket_stats = BucketStats(
                     count=count,
                     median=float(median),
                     mean=float(mean),
                     min=int(min_distance),
                     max=int(max_distance),
-                    method="exact"
+                    method="exact",
                 )
             else:
                 bucket_stats = BucketStats(
-                    count=0,
-                    median=None,
-                    mean=None,
-                    min=None,
-                    max=None,
-                    method="exact"
+                    count=0, median=None, mean=None, min=None, max=None, method="exact"
                 )
 
-            stats_by_range.append(RangeStats(
-                range=range_str,
-                stats=bucket_stats
-            ))
+            stats_by_range.append(RangeStats(range=range_str, stats=bucket_stats))
 
         return HitStatsResponse(stats_by_range=stats_by_range)
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while calculating hit statistics"
+            detail="Database error occurred while calculating hit statistics",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while calculating hit statistics"
+            detail="An unexpected error occurred while calculating hit statistics",
         )
 
 
-@router.get("/streams/{stream_id}/hits/stats/global", response_model=GlobalHitStatsResponse)
+@router.get(
+    "/streams/{stream_id}/hits/stats/global", response_model=GlobalHitStatsResponse
+)
 async def get_global_hit_statistics(
-    stream_id: UUID,
-    bucket: float,
-    session: AsyncSession = Depends(get_session)
+    stream_id: UUID, bucket: float, session: AsyncSession = Depends(get_session)
 ) -> GlobalHitStatsResponse:
     """
     Get global hit statistics for a specific multiplier bucket across the entire seed history.
-    
+
     Returns global statistics with theoretical ETA calculations and confidence intervals.
     """
     try:
@@ -2199,7 +2211,7 @@ async def get_global_hit_statistics(
         if bucket_2dp < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Bucket value cannot be negative"
+                detail="Bucket value cannot be negative",
             )
 
         # Verify stream exists
@@ -2210,11 +2222,12 @@ async def get_global_hit_statistics(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Calculate global statistics - fetch all distances for proper median calculation
-        global_stats_query = text("""
+        global_stats_query = text(
+            """
             WITH ordered_hits AS (
                 SELECT 
                     nonce,
@@ -2234,12 +2247,13 @@ async def get_global_hit_statistics(
                 distance
             FROM distances
             ORDER BY distance
-        """)
+        """
+        )
 
-        global_stats_result = await session.execute(global_stats_query, {
-            "stream_id": uuid_to_db_format(stream_id),
-            "bucket_2dp": bucket_2dp
-        })
+        global_stats_result = await session.execute(
+            global_stats_query,
+            {"stream_id": uuid_to_db_format(stream_id), "bucket_2dp": bucket_2dp},
+        )
         distances = [row.distance for row in global_stats_result.fetchall()]
 
         if distances:
@@ -2248,12 +2262,14 @@ async def get_global_hit_statistics(
             mean = sum(distances) / count
             min_distance = min(distances)
             max_distance = max(distances)
-            
+
             # Calculate proper median
             sorted_distances = sorted(distances)
             if count % 2 == 0:
                 # Even number of elements - average of middle two
-                median = (sorted_distances[count // 2 - 1] + sorted_distances[count // 2]) / 2
+                median = (
+                    sorted_distances[count // 2 - 1] + sorted_distances[count // 2]
+                ) / 2
             else:
                 # Odd number of elements - middle element
                 median = sorted_distances[count // 2]
@@ -2278,16 +2294,11 @@ async def get_global_hit_statistics(
                 mean=float(mean),
                 min=int(min_distance),
                 max=int(max_distance),
-                method="exact"
+                method="exact",
             )
         else:
             global_stats = BucketStats(
-                count=0,
-                median=None,
-                mean=None,
-                min=None,
-                max=None,
-                method="exact"
+                count=0, median=None, mean=None, min=None, max=None, method="exact"
             )
             theoretical_eta = None
             confidence_interval = None
@@ -2295,76 +2306,80 @@ async def get_global_hit_statistics(
         return GlobalHitStatsResponse(
             global_stats=global_stats,
             theoretical_eta=theoretical_eta,
-            confidence_interval=confidence_interval
+            confidence_interval=confidence_interval,
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while calculating global hit statistics"
+            detail="Database error occurred while calculating global hit statistics",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while calculating global hit statistics"
+            detail="An unexpected error occurred while calculating global hit statistics",
         )
 
 
 @router.get("/streams/{stream_id}/hits/batch", response_model=BatchHitQueryResponse)
 async def get_batch_hits(
     stream_id: UUID,
-    buckets: str = Query(..., description="Comma-separated list of bucket values (e.g., '11200,48800')"),
+    buckets: str = Query(
+        ..., description="Comma-separated list of bucket values (e.g., '11200,48800')"
+    ),
     after_nonce: int = Query(0, ge=0, description="Start nonce (inclusive)"),
-    before_nonce: Optional[int] = Query(None, ge=0, description="End nonce (exclusive)"),
-    limit_per_bucket: int = Query(500, ge=1, le=1000, description="Maximum hits per bucket"),
-    session: AsyncSession = Depends(get_session)
+    before_nonce: int | None = Query(None, ge=0, description="End nonce (exclusive)"),
+    limit_per_bucket: int = Query(
+        500, ge=1, le=1000, description="Maximum hits per bucket"
+    ),
+    session: AsyncSession = Depends(get_session),
 ) -> BatchHitQueryResponse:
     """
     Get hits for multiple buckets in a single request for efficient multi-bucket analysis.
-    
+
     This endpoint minimizes database round trips by fetching hits for multiple multiplier
     buckets in a single query, with proper distance calculations and statistics.
     """
     try:
         # Parse and validate buckets parameter
         try:
-            bucket_values = [float(b.strip()) for b in buckets.split(',') if b.strip()]
+            bucket_values = [float(b.strip()) for b in buckets.split(",") if b.strip()]
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid bucket values. Must be comma-separated numbers."
+                detail="Invalid bucket values. Must be comma-separated numbers.",
             )
-        
+
         if not bucket_values:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one bucket value must be provided"
+                detail="At least one bucket value must be provided",
             )
-        
+
         if len(bucket_values) > 20:  # Reasonable limit to prevent abuse
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Maximum 20 buckets allowed per batch request"
+                detail="Maximum 20 buckets allowed per batch request",
             )
-        
+
         # Validate bucket values
         bucket_2dp_values = []
         for bucket in bucket_values:
             if bucket < 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Bucket value {bucket} cannot be negative"
+                    detail=f"Bucket value {bucket} cannot be negative",
                 )
             bucket_2dp_values.append(round(bucket, 2))
-        
+
         # Validate nonce range
         if before_nonce is not None and before_nonce <= after_nonce:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="before_nonce must be greater than after_nonce"
+                detail="before_nonce must be greater than after_nonce",
             )
 
         # Verify stream exists
@@ -2375,7 +2390,7 @@ async def get_batch_hits(
         if stream is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Stream with ID {stream_id} not found"
+                detail=f"Stream with ID {stream_id} not found",
             )
 
         # Build efficient batch query for all buckets
@@ -2384,20 +2399,20 @@ async def get_batch_hits(
         query_params = {
             "stream_id": uuid_to_db_format(stream_id),
             "after_nonce": after_nonce,
-            "limit_per_bucket": limit_per_bucket
+            "limit_per_bucket": limit_per_bucket,
         }
-        
+
         for i, bucket_2dp in enumerate(bucket_2dp_values):
             bucket_param = f"bucket_{i}"
             query_params[bucket_param] = bucket_2dp
-            
+
             # Build individual bucket query with distance calculation
             before_nonce_clause = ""
             if before_nonce is not None:
                 before_nonce_param = f"before_nonce_{i}"
                 query_params[before_nonce_param] = before_nonce
                 before_nonce_clause = f"AND nonce < :{before_nonce_param}"
-            
+
             bucket_query = f"""
                 SELECT 
                     nonce,
@@ -2413,7 +2428,7 @@ async def get_batch_hits(
                   {before_nonce_clause}
             """
             bucket_queries.append(bucket_query)
-        
+
         # Combine all bucket queries with UNION ALL and apply limit per bucket
         combined_query = f"""
             WITH all_hits AS (
@@ -2436,17 +2451,19 @@ async def get_batch_hits(
         # Group hits by bucket and calculate statistics
         hits_by_bucket = {}
         stats_by_bucket = {}
-        
+
         for bucket_2dp in bucket_2dp_values:
             bucket_str = str(bucket_2dp)
             hits_by_bucket[bucket_str] = []
-            
+
             # Filter hits for this bucket
             bucket_hits = [
-                row for row in all_hit_records 
-                if abs(float(row.bucket) - bucket_2dp) < 0.001  # Handle floating point precision
+                row
+                for row in all_hit_records
+                if abs(float(row.bucket) - bucket_2dp)
+                < 0.001  # Handle floating point precision
             ]
-            
+
             # Convert to HitRecord format
             for row in bucket_hits:
                 hits_by_bucket[bucket_str].append(
@@ -2455,57 +2472,57 @@ async def get_batch_hits(
                         bucket=float(row.bucket),
                         distance_prev=row.distance_prev,
                         id=row.id,
-                        date_time=row.date_time
+                        date_time=row.date_time,
                     )
                 )
-            
+
             # Calculate statistics for this bucket
-            distances = [hit.distance_prev for hit in hits_by_bucket[bucket_str] if hit.distance_prev is not None]
-            
+            distances = [
+                hit.distance_prev
+                for hit in hits_by_bucket[bucket_str]
+                if hit.distance_prev is not None
+            ]
+
             if distances:
                 # Calculate proper median
                 sorted_distances = sorted(distances)
                 count = len(distances)
                 if count % 2 == 0:
                     # Even number of elements - average of middle two
-                    median = (sorted_distances[count // 2 - 1] + sorted_distances[count // 2]) / 2
+                    median = (
+                        sorted_distances[count // 2 - 1] + sorted_distances[count // 2]
+                    ) / 2
                 else:
                     # Odd number of elements - middle element
                     median = sorted_distances[count // 2]
-                
+
                 stats_by_bucket[bucket_str] = BucketStats(
                     count=count,
                     median=float(median),
                     mean=float(sum(distances) / count),
                     min=min(distances),
                     max=max(distances),
-                    method="exact"
+                    method="exact",
                 )
             else:
                 stats_by_bucket[bucket_str] = BucketStats(
-                    count=0,
-                    median=None,
-                    mean=None,
-                    min=None,
-                    max=None,
-                    method="exact"
+                    count=0, median=None, mean=None, min=None, max=None, method="exact"
                 )
 
         return BatchHitQueryResponse(
-            hits_by_bucket=hits_by_bucket,
-            stats_by_bucket=stats_by_bucket
+            hits_by_bucket=hits_by_bucket, stats_by_bucket=stats_by_bucket
         )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 404, 400)
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching batch hits"
+            detail="Database error occurred while fetching batch hits",
         )
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching batch hits"
+            detail="An unexpected error occurred while fetching batch hits",
         )

@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from typing import Any, Dict, Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, insert, text
+from sqlalchemy import func, insert
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from ..core.config import get_settings
@@ -16,15 +18,13 @@ from ..db import get_session
 from ..engine.pump import ENGINE_VERSION, scan_pump, verify_pump
 from ..models.runs import Hit, Run
 from ..schemas.runs import (
+    DistanceStatsPayload,
     HitRow,
     HitsPage,
     RunCreate,
     RunDetail,
     RunRead,
-    DistanceStatsPayload,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -37,16 +37,16 @@ def _error_response(
     message: str,
     status_code: int,
     code: str = "VALIDATION_ERROR",
-    field: Optional[str] = None,
+    field: str | None = None,
 ) -> JSONResponse:
-    payload: Dict[str, Any] = {"error": {"code": code, "message": message}}
+    payload: dict[str, Any] = {"error": {"code": code, "message": message}}
     if field is not None:
         payload["error"]["field"] = field
     return JSONResponse(status_code=status_code, content=payload)
 
 
-def _sanitize_targets(raw_targets: List[float]) -> List[float]:
-    cleaned: List[float] = []
+def _sanitize_targets(raw_targets: list[float]) -> list[float]:
+    cleaned: list[float] = []
     for t in raw_targets:
         try:
             f = float(t)
@@ -120,7 +120,7 @@ async def create_run(body: RunCreate, session: AsyncSession = Depends(get_sessio
         for n in nonce_list:
             nonce_set.add(n)
 
-    hits_data: List[Dict[str, Any]] = []
+    hits_data: list[dict[str, Any]] = []
     for nonce in sorted(nonce_set):
         try:
             res = verify_pump(
@@ -157,13 +157,14 @@ async def create_run(body: RunCreate, session: AsyncSession = Depends(get_sessio
 
 from ..schemas.runs import RunListResponse
 
+
 @router.get("", response_model=RunListResponse)
 async def list_runs(
     session: AsyncSession = Depends(get_session),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    search: Optional[str] = Query(None),
-    difficulty: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    difficulty: str | None = Query(None),
 ):
     # Build base query
     base_query = select(Run)
@@ -189,7 +190,7 @@ async def list_runs(
     result = await session.execute(query)
     rows = result.scalars().all()
 
-    runs: List[RunRead] = []
+    runs: list[RunRead] = []
     for r in rows:
         summary = json.loads(r.summary_json)
         runs.append(
@@ -238,17 +239,21 @@ async def get_run(run_id: UUID, session: AsyncSession = Depends(get_session)):
 async def get_hits(
     run_id: UUID,
     session: AsyncSession = Depends(get_session),
-    min_multiplier: Optional[float] = Query(None),
+    min_multiplier: float | None = Query(None),
     limit: int = Query(100, ge=1, le=10_000),
     offset: int = Query(0, ge=0),
-    include_distance: Optional[str] = Query(
+    include_distance: str | None = Query(
         None,
         description="Set to 'per_multiplier' to include distance_prev per multiplier",
     ),
     tol: float = Query(1e-9, ge=0.0),
 ):
     # Ensure run exists
-    r = (await session.execute(select(Run.id).where(Run.id == run_id))).scalars().first()
+    r = (
+        (await session.execute(select(Run.id).where(Run.id == run_id)))
+        .scalars()
+        .first()
+    )
     if not r:
         return _error_response("Run not found", 404, code="NOT_FOUND")
 
@@ -451,7 +456,11 @@ async def export_distances_csv(
 @router.get("/{run_id}/export/hits.csv")
 async def export_hits_csv(run_id: UUID, session: AsyncSession = Depends(get_session)):
     # Ensure run exists
-    r = (await session.execute(select(Run.id).where(Run.id == run_id))).scalars().first()
+    r = (
+        (await session.execute(select(Run.id).where(Run.id == run_id)))
+        .scalars()
+        .first()
+    )
     if not r:
         return _error_response("Run not found", 404, code="NOT_FOUND")
 

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type AxiosError } from "axios";
 import { runsApi, verifyApi, liveStreamsApi } from "./api";
 import type { RunListFilters, HitsFilters, RunCreateRequest, StreamListFilters, StreamBetsFilters, Hit } from "./api";
 
@@ -63,16 +64,16 @@ export const usePaginatedHitsQuery = (
     staleTime: 10 * 60 * 1000, // 10 minutes for static data
     gcTime: 30 * 60 * 1000, // 30 minutes cache
     placeholderData: (previousData) => previousData,
-    retry: (failureCount, error) => {
+    retry: (failureCount, error: AxiosError) => {
       if (failureCount >= 3) return false;
-      const status = (error as any)?.apiError?.status;
+      const status = error.response?.status;
       return !status || status >= 500;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  const hits = (query.data as any)?.rows || [];
-  const total = (query.data as any)?.total || 0;
+  const hits = (query.data as { rows?: Hit[]; total?: number })?.rows || [];
+  const total = (query.data as { rows?: Hit[]; total?: number })?.total || 0;
   const pageCount = Math.ceil(total / (filters.limit || 50));
 
   return {
@@ -81,7 +82,7 @@ export const usePaginatedHitsQuery = (
     pageCount,
     isLoading: query.isLoading,
     isError: query.isError,
-    error: query.error || null,
+    error: query.error as Error | null,
     refetch: query.refetch,
     isFetching: query.isFetching,
   };

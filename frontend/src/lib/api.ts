@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosError } from "axios";
 import {
   validateRunDetail,
   validateHit,
@@ -24,7 +24,7 @@ const isDevelopment = import.meta.env.DEV;
 interface APIError {
   message: string;
   status?: number;
-  details?: any;
+  details?: Record<string, unknown>;
   timestamp: string;
   type: 'network' | 'http' | 'timeout' | 'unknown';
 }
@@ -35,8 +35,8 @@ interface DebugInfo {
   requestTime: number;
   responseTime?: number;
   responseStatus?: number;
-  responseData?: any;
-  requestData?: any;
+  responseData?: Record<string, unknown>;
+  requestData?: Record<string, unknown>;
   errors?: string[];
 }
 
@@ -100,7 +100,7 @@ apiClient.interceptors.response.use(
       const url = response.config.url || "";
 
       // Validate RunDetail responses
-      if (url.match(/\/runs\/[^\/]+$/) && !url.includes("/hits")) {
+      if (url.match(/^\/runs\/[^\/]+$/ ) && !url.includes("/hits")) {
         const validation = validateRunDetail(response.data);
         if (!validation.isValid) {
           console.error(
@@ -459,7 +459,7 @@ export interface DistanceStatsResponse {
         stddev: number;
         cv: number;
       }
-    | {};
+    | Record<string, unknown>;
 }
 
 export const distancesApi = {

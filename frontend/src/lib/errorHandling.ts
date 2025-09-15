@@ -1,14 +1,15 @@
 import toast from "react-hot-toast";
+import { type AxiosError } from "axios";
 
 // Error retry logic for API calls
-export const shouldRetry = (error: any): boolean => {
+export const shouldRetry = (error: AxiosError | unknown): boolean => {
   // Don't retry on 4xx client errors (except 408, 429)
-  if (error?.response?.status >= 400 && error?.response?.status < 500) {
-    return error?.response?.status === 408 || error?.response?.status === 429;
+  if ((error as AxiosError)?.response?.status >= 400 && (error as AxiosError)?.response?.status < 500) {
+    return err.response?.status === 408 || err.response?.status === 429;
   }
 
   // Retry on 5xx server errors and network errors
-  return error?.response?.status >= 500 || !error?.response;
+  return (error as AxiosError)?.response?.status >= 500 || !(error as AxiosError)?.response;
 };
 
 // Success toast with consistent styling
@@ -27,9 +28,9 @@ export const showSuccessToast = (message: string) => {
 };
 
 // Error toast with consistent styling
-export const showErrorToast = (error: any, fallbackMessage?: string) => {
-  const message = error?.response?.data?.message ||
-                  error?.message ||
+export const showErrorToast = (error: AxiosError | unknown, fallbackMessage?: string) => {
+  const message = (error as AxiosError)?.response?.data?.message ||
+                  (error as Error)?.message ||
                   fallbackMessage ||
                   'An error occurred';
 

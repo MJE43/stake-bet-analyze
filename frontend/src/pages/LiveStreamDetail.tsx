@@ -125,7 +125,7 @@ const LiveStreamDetailContent = () => {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-4">
-                {streamError?.message ||
+                {(streamError as Error)?.message ||
                   "The requested stream could not be found."}
               </p>
               <Button variant="outline" asChild>

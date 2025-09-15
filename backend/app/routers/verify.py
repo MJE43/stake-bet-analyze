@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from ..engine.pump import verify_pump
-
 
 router = APIRouter(tags=["verify"])
 
@@ -16,7 +15,7 @@ async def verify(
     client_seed: str = Query(...),
     nonce: int = Query(..., ge=1),
     difficulty: str = Query(...),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not server_seed or not server_seed.strip():
         raise HTTPException(
             status_code=422,

@@ -6,20 +6,16 @@ tail endpoint semantics with since_id ordering, and null date_time and duplicate
 """
 
 import asyncio
-import json
-import pytest
-from datetime import datetime, timezone
 from uuid import UUID
+
+import pytest
 from httpx import AsyncClient
-from sqlmodel import SQLModel, select
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel
 
-from app.main import app
 from app.db import get_session
-from app.core.config import get_settings
-from app.models.live_streams import LiveStream, LiveBet
-
+from app.main import app
 
 # Test database setup
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -39,10 +35,10 @@ async def test_db():
 @pytest.fixture
 async def client(test_db, monkeypatch):
     """Create test client with test database."""
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.ext.asyncio import AsyncSession
 
-    TestSessionLocal = sessionmaker(test_db, class_=AsyncSession, expire_on_commit=False)
+    TestSessionLocal = sessionmaker(
+        test_db, class_=AsyncSession, expire_on_commit=False
+    )
 
     async def get_test_session():
         async with TestSessionLocal() as session:
@@ -90,7 +86,9 @@ def sample_bet_payload():
 class TestIngestionEndpoint:
     """Test the ingestion endpoint with various scenarios."""
 
-    async def test_ingest_bet_success_new_stream(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_success_new_stream(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test successful bet ingestion that creates a new stream."""
         response = await client.post("/live/ingest", json=sample_bet_payload)
 
@@ -107,7 +105,9 @@ class TestIngestionEndpoint:
         assert data["accepted"] is True
         assert isinstance(UUID(data["streamId"]), UUID)
 
-    async def test_ingest_bet_success_existing_stream(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_success_existing_stream(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test successful bet ingestion to existing stream."""
         # First ingestion creates stream
         response1 = await client.post("/live/ingest", json=sample_bet_payload)
@@ -127,7 +127,9 @@ class TestIngestionEndpoint:
         assert data2["streamId"] == stream_id_1
         assert data2["accepted"] is True
 
-    async def test_ingest_bet_duplicate_handling(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_duplicate_handling(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test idempotent handling of duplicate bets."""
         # First ingestion
         response1 = await client.post("/live/ingest", json=sample_bet_payload)
@@ -144,7 +146,9 @@ class TestIngestionEndpoint:
         assert data2["streamId"] == data1["streamId"]
         assert data2["accepted"] is False
 
-    async def test_ingest_bet_null_datetime_handling(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_null_datetime_handling(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test handling of null or invalid dateTime values."""
         # Test with null dateTime
         payload_null = sample_bet_payload.copy()
@@ -164,7 +168,9 @@ class TestIngestionEndpoint:
         assert response.status_code == 200
         assert response.json()["accepted"] is True
 
-    async def test_ingest_bet_validation_errors(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_validation_errors(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test validation errors in bet ingestion."""
         # Missing required field
         payload_missing = sample_bet_payload.copy()
@@ -189,7 +195,9 @@ class TestIngestionEndpoint:
         response = await client.post("/live/ingest", json=payload_invalid_difficulty)
         assert response.status_code == 422
 
-    async def test_ingest_bet_constraint_violations(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_constraint_violations(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test database constraint violation handling."""
         # Negative amount
         payload_negative_amount = sample_bet_payload.copy()
@@ -209,13 +217,17 @@ class TestIngestionEndpoint:
         assert response.status_code == 422
         assert "Payout must be greater than or equal to 0" in response.json()["detail"]
 
-    async def test_ingest_bet_without_token(self, client: AsyncClient, sample_bet_payload):
+    async def test_ingest_bet_without_token(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test ingestion without token when none is configured."""
         # Should succeed when no token is configured
         response = await client.post("/live/ingest", json=sample_bet_payload)
         assert response.status_code == 200
 
-    async def test_ingest_bet_with_token_authentication(self, client: AsyncClient, sample_bet_payload, monkeypatch):
+    async def test_ingest_bet_with_token_authentication(
+        self, client: AsyncClient, sample_bet_payload, monkeypatch
+    ):
         """Test token authentication for ingestion."""
         # Mock settings to require token
         from app.core.config import Settings
@@ -240,16 +252,22 @@ class TestIngestionEndpoint:
 
         # Request with wrong token should fail
         headers = {"X-Ingest-Token": "wrong-token"}
-        response = await client.post("/live/ingest", json=sample_bet_payload, headers=headers)
+        response = await client.post(
+            "/live/ingest", json=sample_bet_payload, headers=headers
+        )
         assert response.status_code == 401
         assert "Invalid ingest token" in response.json()["detail"]
 
         # Request with correct token should succeed
         headers = {"X-Ingest-Token": "test-secret-token"}
-        response = await client.post("/live/ingest", json=sample_bet_payload, headers=headers)
+        response = await client.post(
+            "/live/ingest", json=sample_bet_payload, headers=headers
+        )
         assert response.status_code == 200
 
-    async def test_concurrent_ingestion_requests(self, client: AsyncClient, sample_bet_payload):
+    async def test_concurrent_ingestion_requests(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test concurrent ingestion requests for race conditions."""
         # Create multiple payloads with same stream but different bet IDs
         payloads = []
@@ -276,7 +294,9 @@ class TestIngestionEndpoint:
         stream_ids = [response.json()["streamId"] for response in responses]
         assert len(set(stream_ids)) == 1  # All same stream ID
 
-    async def test_concurrent_duplicate_requests(self, client: AsyncClient, sample_bet_payload):
+    async def test_concurrent_duplicate_requests(
+        self, client: AsyncClient, sample_bet_payload
+    ):
         """Test concurrent duplicate requests for idempotency."""
         # Disable rate limiting for this test
         from app.core.config import Settings
@@ -316,7 +336,9 @@ class TestIngestionEndpoint:
 class TestTailEndpoint:
     """Test tail endpoint semantics with since_id ordering."""
 
-    async def _create_test_stream_with_bets(self, client: AsyncClient, bet_count: int = 5):
+    async def _create_test_stream_with_bets(
+        self, client: AsyncClient, bet_count: int = 5
+    ):
         """Helper to create a stream with multiple bets."""
         stream_id = None
         bet_ids = []
@@ -385,7 +407,9 @@ class TestTailEndpoint:
             await client.post("/live/ingest", json=payload)
 
         # Get incremental update
-        response2 = await client.get(f"/live/streams/{stream_id}/tail?since_id={first_last_id}")
+        response2 = await client.get(
+            f"/live/streams/{stream_id}/tail?since_id={first_last_id}"
+        )
         data2 = response2.json()
 
         # Should only get new bets
@@ -412,7 +436,9 @@ class TestTailEndpoint:
         last_id = response1.json()["last_id"]
 
         # Request with current last_id (no new bets)
-        response2 = await client.get(f"/live/streams/{stream_id}/tail?since_id={last_id}")
+        response2 = await client.get(
+            f"/live/streams/{stream_id}/tail?since_id={last_id}"
+        )
         data2 = response2.json()
 
         assert len(data2["bets"]) == 0
@@ -630,7 +656,7 @@ class TestMetricsEndpoint:
             "payout": 20.0,
             "difficulty": "easy",
             "clientSeed": "pinned_client",
-            "serverSeedHashed": "pinned_hash"
+            "serverSeedHashed": "pinned_hash",
         }
 
         # Create bets with different multipliers
@@ -653,8 +679,7 @@ class TestMetricsEndpoint:
 
         # Test metrics with pinned multipliers
         response = await client.get(
-            f"/live/streams/{stream_id}/metrics",
-            params={"multipliers": [2.0, 5.0]}
+            f"/live/streams/{stream_id}/metrics", params={"multipliers": [2.0, 5.0]}
         )
 
         if response.status_code != 200:

@@ -11,23 +11,22 @@ These tests validate the complete API functionality including:
 - Error handling and validation
 """
 
-import json
+from uuid import uuid4
+
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.main import app
 from app.db import get_session
 from app.engine.pump import ENGINE_VERSION
-from app.models.runs import Run, Hit
-from uuid import uuid4
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.main import app
+from app.models.runs import Hit, Run
 
 # Test database setup
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
 
 @pytest.fixture
 async def test_db():
@@ -43,10 +42,11 @@ async def test_db():
 @pytest.fixture
 async def client(test_db):
     """Create test client with test database."""
-    from sqlalchemy.orm import sessionmaker
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    TestSessionLocal = sessionmaker(test_db, class_=AsyncSession, expire_on_commit=False)
+    TestSessionLocal = sessionmaker(
+        test_db, class_=AsyncSession, expire_on_commit=False
+    )
 
     async def get_test_session():
         async with TestSessionLocal() as session:
@@ -81,7 +81,7 @@ class TestRunCreation:
             "start": 1,
             "end": 10,
             "difficulty": "easy",
-            "targets": [1.0, 2.0, 5.0]
+            "targets": [1.0, 2.0, 5.0],
         }
 
         response = await client.post("/runs", json=payload)
@@ -91,9 +91,18 @@ class TestRunCreation:
 
         # Check response structure
         required_fields = {
-            "id", "created_at", "server_seed_sha256", "server_seed",
-            "client_seed", "nonce_start", "nonce_end", "difficulty",
-            "targets", "duration_ms", "engine_version", "summary"
+            "id",
+            "created_at",
+            "server_seed_sha256",
+            "server_seed",
+            "client_seed",
+            "nonce_start",
+            "nonce_end",
+            "difficulty",
+            "targets",
+            "duration_ms",
+            "engine_version",
+            "summary",
         }
         assert set(data.keys()) == required_fields
 
@@ -111,9 +120,16 @@ class TestRunCreation:
         # Check summary structure
         summary = data["summary"]
         summary_fields = {
-            "count", "duration_ms", "difficulty", "start", "end",
-            "targets", "max_multiplier", "median_multiplier",
-            "counts_by_target", "top_max"
+            "count",
+            "duration_ms",
+            "difficulty",
+            "start",
+            "end",
+            "targets",
+            "max_multiplier",
+            "median_multiplier",
+            "counts_by_target",
+            "top_max",
         }
         assert set(summary.keys()) == summary_fields
         assert summary["count"] == 10
@@ -124,81 +140,99 @@ class TestRunCreation:
         """Test validation errors in run creation."""
 
         # Empty server seed
-        response = await client.post("/runs", json={
-            "server_seed": "",
-            "client_seed": "test",
-            "start": 1,
-            "end": 10,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "",
+                "client_seed": "test",
+                "start": 1,
+                "end": 10,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         assert response.status_code == 422
         error = response.json()["error"]
         assert error["field"] == "server_seed"
 
         # Invalid difficulty
-        response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test",
-            "start": 1,
-            "end": 10,
-            "difficulty": "invalid",
-            "targets": [1.0]
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test",
+                "start": 1,
+                "end": 10,
+                "difficulty": "invalid",
+                "targets": [1.0],
+            },
+        )
         assert response.status_code == 422
         error = response.json()["error"]
         assert error["field"] == "difficulty"
 
         # Invalid range
-        response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test",
-            "start": 10,
-            "end": 5,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test",
+                "start": 10,
+                "end": 5,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         assert response.status_code == 422
         error = response.json()["error"]
         assert error["field"] == "end"
 
         # Empty targets
-        response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test",
-            "start": 1,
-            "end": 10,
-            "difficulty": "easy",
-            "targets": []
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test",
+                "start": 1,
+                "end": 10,
+                "difficulty": "easy",
+                "targets": [],
+            },
+        )
         assert response.status_code == 422
         error = response.json()["error"]
         assert error["field"] == "targets"
 
     async def test_create_run_range_too_large(self, client: AsyncClient):
         """Test range size limit enforcement."""
-        response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test",
-            "start": 1,
-            "end": 1_000_001,  # Exceeds default limit of 500k
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test",
+                "start": 1,
+                "end": 1_000_001,  # Exceeds default limit of 500k
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         assert response.status_code == 413
         error = response.json()["error"]
         assert error["code"] == "RANGE_TOO_LARGE"
 
     async def test_create_run_target_sanitization(self, client: AsyncClient):
         """Test target sanitization (deduplication, sorting)."""
-        response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test",
-            "start": 1,
-            "end": 5,
-            "difficulty": "easy",
-            "targets": [5.0, 1.0, 5.0, 2.0]  # Duplicates and unsorted
-        })
+        response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test",
+                "start": 1,
+                "end": 5,
+                "difficulty": "easy",
+                "targets": [5.0, 1.0, 5.0, 2.0],  # Duplicates and unsorted
+            },
+        )
         assert response.status_code == 201
 
         data = response.json()
@@ -223,14 +257,17 @@ class TestRunListing:
     async def test_list_runs_with_data(self, client: AsyncClient):
         """Test listing with existing runs."""
         # Create a test run first
-        create_response = await client.post("/runs", json={
-            "server_seed": "test_server",
-            "client_seed": "test_client_123",
-            "start": 1,
-            "end": 5,
-            "difficulty": "medium",
-            "targets": [1.0, 10.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "test_server",
+                "client_seed": "test_client_123",
+                "start": 1,
+                "end": 5,
+                "difficulty": "medium",
+                "targets": [1.0, 10.0],
+            },
+        )
         assert create_response.status_code == 201
 
         # List runs
@@ -246,9 +283,17 @@ class TestRunListing:
 
         run = data["runs"][0]
         required_fields = {
-            "id", "created_at", "server_seed_sha256", "client_seed",
-            "difficulty", "nonce_start", "nonce_end", "duration_ms",
-            "engine_version", "targets", "counts_by_target"
+            "id",
+            "created_at",
+            "server_seed_sha256",
+            "client_seed",
+            "difficulty",
+            "nonce_start",
+            "nonce_end",
+            "duration_ms",
+            "engine_version",
+            "targets",
+            "counts_by_target",
         }
         assert set(run.keys()) == required_fields
 
@@ -260,14 +305,17 @@ class TestRunListing:
         """Test run listing pagination."""
         # Create multiple runs
         for i in range(3):
-            await client.post("/runs", json={
-                "server_seed": f"server_{i}",
-                "client_seed": f"client_{i}",
-                "start": 1,
-                "end": 2,
-                "difficulty": "easy",
-                "targets": [1.0]
-            })
+            await client.post(
+                "/runs",
+                json={
+                    "server_seed": f"server_{i}",
+                    "client_seed": f"client_{i}",
+                    "start": 1,
+                    "end": 2,
+                    "difficulty": "easy",
+                    "targets": [1.0],
+                },
+            )
 
         # Test limit
         response = await client.get("/runs?limit=2")
@@ -284,23 +332,29 @@ class TestRunListing:
     async def test_list_runs_search_filter(self, client: AsyncClient):
         """Test run listing with search filter."""
         # Create runs with different client seeds
-        await client.post("/runs", json={
-            "server_seed": "server1",
-            "client_seed": "findme_123",
-            "start": 1,
-            "end": 2,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        await client.post(
+            "/runs",
+            json={
+                "server_seed": "server1",
+                "client_seed": "findme_123",
+                "start": 1,
+                "end": 2,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
 
-        await client.post("/runs", json={
-            "server_seed": "server2",
-            "client_seed": "other_456",
-            "start": 1,
-            "end": 2,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        await client.post(
+            "/runs",
+            json={
+                "server_seed": "server2",
+                "client_seed": "other_456",
+                "start": 1,
+                "end": 2,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
 
         # Search for specific client seed
         response = await client.get("/runs?search=findme")
@@ -312,23 +366,29 @@ class TestRunListing:
     async def test_list_runs_difficulty_filter(self, client: AsyncClient):
         """Test run listing with difficulty filter."""
         # Create runs with different difficulties
-        await client.post("/runs", json={
-            "server_seed": "server1",
-            "client_seed": "client1",
-            "start": 1,
-            "end": 2,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        await client.post(
+            "/runs",
+            json={
+                "server_seed": "server1",
+                "client_seed": "client1",
+                "start": 1,
+                "end": 2,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
 
-        await client.post("/runs", json={
-            "server_seed": "server2",
-            "client_seed": "client2",
-            "start": 1,
-            "end": 2,
-            "difficulty": "hard",
-            "targets": [1.0]
-        })
+        await client.post(
+            "/runs",
+            json={
+                "server_seed": "server2",
+                "client_seed": "client2",
+                "start": 1,
+                "end": 2,
+                "difficulty": "hard",
+                "targets": [1.0],
+            },
+        )
 
         # Filter by difficulty
         response = await client.get("/runs?difficulty=easy")
@@ -344,14 +404,17 @@ class TestRunDetails:
     async def test_get_run_success(self, client: AsyncClient):
         """Test successful run details retrieval."""
         # Create a run first
-        create_response = await client.post("/runs", json={
-            "server_seed": "detailed_server_seed",
-            "client_seed": "detailed_client",
-            "start": 1,
-            "end": 5,
-            "difficulty": "expert",
-            "targets": [1.0, 100.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "detailed_server_seed",
+                "client_seed": "detailed_client",
+                "start": 1,
+                "end": 5,
+                "difficulty": "expert",
+                "targets": [1.0, 100.0],
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Get run details
@@ -381,14 +444,17 @@ class TestRunHits:
     async def test_get_hits_success(self, client: AsyncClient):
         """Test successful hits retrieval."""
         # Create a run first
-        create_response = await client.post("/runs", json={
-            "server_seed": "hits_server",
-            "client_seed": "hits_client",
-            "start": 1,
-            "end": 10,
-            "difficulty": "easy",
-            "targets": [1.0]  # Should have hits for 1.0
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "hits_server",
+                "client_seed": "hits_client",
+                "start": 1,
+                "end": 10,
+                "difficulty": "easy",
+                "targets": [1.0],  # Should have hits for 1.0
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Get hits
@@ -412,14 +478,17 @@ class TestRunHits:
     async def test_get_hits_pagination(self, client: AsyncClient):
         """Test hits pagination."""
         # Create a run with many hits
-        create_response = await client.post("/runs", json={
-            "server_seed": "pagination_server",
-            "client_seed": "pagination_client",
-            "start": 1,
-            "end": 50,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "pagination_server",
+                "client_seed": "pagination_client",
+                "start": 1,
+                "end": 50,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Test limit
@@ -431,14 +500,17 @@ class TestRunHits:
     async def test_get_hits_min_multiplier_filter(self, client: AsyncClient):
         """Test hits filtering by minimum multiplier."""
         # Create a run
-        create_response = await client.post("/runs", json={
-            "server_seed": "filter_server",
-            "client_seed": "filter_client",
-            "start": 1,
-            "end": 20,
-            "difficulty": "easy",
-            "targets": [1.0, 5.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "filter_server",
+                "client_seed": "filter_client",
+                "start": 1,
+                "end": 20,
+                "difficulty": "easy",
+                "targets": [1.0, 5.0],
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Get hits with minimum multiplier filter
@@ -552,14 +624,17 @@ class TestCSVExports:
     async def test_export_hits_csv(self, client: AsyncClient):
         """Test hits CSV export."""
         # Create a run first
-        create_response = await client.post("/runs", json={
-            "server_seed": "csv_server",
-            "client_seed": "csv_client",
-            "start": 1,
-            "end": 5,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "csv_server",
+                "client_seed": "csv_client",
+                "start": 1,
+                "end": 5,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Export hits CSV
@@ -568,13 +643,13 @@ class TestCSVExports:
         assert response.headers["content-type"] == "text/csv; charset=utf-8"
 
         content = response.text
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         assert lines[0] == "nonce,max_multiplier"  # Header
 
         # Should have at least one data row
         if len(lines) > 1:
             # Check data row format
-            parts = lines[1].split(',')
+            parts = lines[1].split(",")
             assert len(parts) == 2
             assert parts[0].isdigit()  # nonce
             assert float(parts[1]) > 0  # multiplier
@@ -582,14 +657,17 @@ class TestCSVExports:
     async def test_export_full_csv(self, client: AsyncClient):
         """Test full CSV export."""
         # Create a run first
-        create_response = await client.post("/runs", json={
-            "server_seed": "full_csv_server",
-            "client_seed": "full_csv_client",
-            "start": 1,
-            "end": 3,
-            "difficulty": "easy",
-            "targets": [1.0]
-        })
+        create_response = await client.post(
+            "/runs",
+            json={
+                "server_seed": "full_csv_server",
+                "client_seed": "full_csv_client",
+                "start": 1,
+                "end": 3,
+                "difficulty": "easy",
+                "targets": [1.0],
+            },
+        )
         run_id = create_response.json()["id"]
 
         # Export full CSV
@@ -598,7 +676,7 @@ class TestCSVExports:
         assert response.headers["content-type"] == "text/csv; charset=utf-8"
 
         content = response.text
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         assert lines[0] == "nonce,max_pumps,max_multiplier,pop_point"  # Header
 
         # Should have exactly 3 data rows (nonces 1, 2, 3)
@@ -606,7 +684,7 @@ class TestCSVExports:
 
         # Check data row format
         for i in range(1, 4):
-            parts = lines[i].split(',')
+            parts = lines[i].split(",")
             assert len(parts) == 4
             assert int(parts[0]) == i  # nonce
             assert int(parts[1]) >= 0  # max_pumps
@@ -629,12 +707,15 @@ class TestVerifyEndpoint:
 
     async def test_verify_success(self, client: AsyncClient):
         """Test successful single nonce verification."""
-        response = await client.get("/verify", params={
-            "server_seed": "verify_server",
-            "client_seed": "verify_client",
-            "nonce": 1,
-            "difficulty": "medium"
-        })
+        response = await client.get(
+            "/verify",
+            params={
+                "server_seed": "verify_server",
+                "client_seed": "verify_client",
+                "nonce": 1,
+                "difficulty": "medium",
+            },
+        )
         assert response.status_code == 200
 
         data = response.json()
@@ -650,30 +731,34 @@ class TestVerifyEndpoint:
     async def test_verify_validation_errors(self, client: AsyncClient):
         """Test verify endpoint validation."""
         # Missing server_seed
-        response = await client.get("/verify", params={
-            "client_seed": "test",
-            "nonce": 1,
-            "difficulty": "easy"
-        })
+        response = await client.get(
+            "/verify", params={"client_seed": "test", "nonce": 1, "difficulty": "easy"}
+        )
         assert response.status_code == 422
 
         # Invalid nonce
-        response = await client.get("/verify", params={
-            "server_seed": "test",
-            "client_seed": "test",
-            "nonce": 0,
-            "difficulty": "easy"
-        })
+        response = await client.get(
+            "/verify",
+            params={
+                "server_seed": "test",
+                "client_seed": "test",
+                "nonce": 0,
+                "difficulty": "easy",
+            },
+        )
         assert response.status_code == 422
 
     async def test_verify_golden_vector(self, client: AsyncClient):
         """Test verify endpoint with golden vector."""
-        response = await client.get("/verify", params={
-            "server_seed": "564e967b90f03d0153fdcb2d2d1cc5a5057e0df78163611fe3801d6498e681ca",
-            "client_seed": "zXv1upuFns",
-            "nonce": 5663,
-            "difficulty": "expert"
-        })
+        response = await client.get(
+            "/verify",
+            params={
+                "server_seed": "564e967b90f03d0153fdcb2d2d1cc5a5057e0df78163611fe3801d6498e681ca",
+                "client_seed": "zXv1upuFns",
+                "nonce": 5663,
+                "difficulty": "expert",
+            },
+        )
         assert response.status_code == 200
 
         data = response.json()
@@ -692,7 +777,7 @@ class TestDeterminism:
             "start": 1,
             "end": 10,
             "difficulty": "medium",
-            "targets": [1.0, 5.0, 10.0]
+            "targets": [1.0, 5.0, 10.0],
         }
 
         # Create first run
@@ -708,8 +793,13 @@ class TestDeterminism:
         # Results should be identical (except IDs and timestamps)
         assert data1["summary"]["count"] == data2["summary"]["count"]
         assert data1["summary"]["max_multiplier"] == data2["summary"]["max_multiplier"]
-        assert data1["summary"]["median_multiplier"] == data2["summary"]["median_multiplier"]
-        assert data1["summary"]["counts_by_target"] == data2["summary"]["counts_by_target"]
+        assert (
+            data1["summary"]["median_multiplier"]
+            == data2["summary"]["median_multiplier"]
+        )
+        assert (
+            data1["summary"]["counts_by_target"] == data2["summary"]["counts_by_target"]
+        )
 
         # Verify hits are identical
         hits1_response = await client.get(f"/runs/{data1['id']}/hits")

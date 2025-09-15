@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class IngestBetRequest(BaseModel):
@@ -13,25 +12,29 @@ class IngestBetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., description="Antebot bet ID")
-    dateTime: Optional[str] = Field(None, description="ISO datetime string, nullable")
+    dateTime: str | None = Field(None, description="ISO datetime string, nullable")
     nonce: int = Field(..., description="Bet nonce")
     amount: float = Field(..., description="Bet amount")
     payout: float = Field(..., description="Payout amount")
     difficulty: str = Field(..., description="Difficulty level")
-    roundTarget: Optional[float] = Field(None, gt=0, description="Round target, must be > 0 if provided")
+    roundTarget: float | None = Field(
+        None, gt=0, description="Round target, must be > 0 if provided"
+    )
     roundResult: float = Field(
         ..., ge=0, description="Round result multiplier (canonical)"
     )
     clientSeed: str = Field(..., description="Client seed")
     serverSeedHashed: str = Field(..., description="Hashed server seed")
 
-    @field_validator('difficulty')
+    @field_validator("difficulty")
     @classmethod
     def validate_difficulty(cls, v):
         """Validate difficulty is one of the allowed values."""
-        allowed_difficulties = {'easy', 'medium', 'hard', 'expert'}
+        allowed_difficulties = {"easy", "medium", "hard", "expert"}
         if v not in allowed_difficulties:
-            raise ValueError(f'difficulty must be one of: {", ".join(allowed_difficulties)}')
+            raise ValueError(
+                f'difficulty must be one of: {", ".join(allowed_difficulties)}'
+            )
         return v
 
 
@@ -39,7 +42,9 @@ class IngestResponse(BaseModel):
     """Response model for bet ingestion."""
 
     streamId: UUID = Field(..., description="Stream ID where bet was processed")
-    accepted: bool = Field(..., description="Whether the bet was accepted (false for duplicates)")
+    accepted: bool = Field(
+        ..., description="Whether the bet was accepted (false for duplicates)"
+    )
 
 
 class BetRecord(BaseModel):
@@ -47,15 +52,21 @@ class BetRecord(BaseModel):
 
     id: int = Field(..., description="Database ID for pagination")
     antebot_bet_id: str = Field(..., description="Original Antebot bet ID")
-    received_at: datetime = Field(..., description="When bet was received by our system")
-    date_time: Optional[datetime] = Field(None, description="Original bet datetime from Antebot")
+    received_at: datetime = Field(
+        ..., description="When bet was received by our system"
+    )
+    date_time: datetime | None = Field(
+        None, description="Original bet datetime from Antebot"
+    )
     nonce: int = Field(..., description="Bet nonce")
     amount: float = Field(..., description="Bet amount")
     payout: float = Field(..., description="Payout amount")
     difficulty: str = Field(..., description="Difficulty level")
-    round_target: Optional[float] = Field(None, description="Round target")
+    round_target: float | None = Field(None, description="Round target")
     round_result: float = Field(..., description="Round result multiplier (canonical)")
-    distance_prev_opt: Optional[int] = Field(None, description="Distance to previous same-multiplier hit")
+    distance_prev_opt: int | None = Field(
+        None, description="Distance to previous same-multiplier hit"
+    )
 
 
 class StreamSummary(BaseModel):
@@ -67,8 +78,10 @@ class StreamSummary(BaseModel):
     created_at: datetime = Field(..., description="Stream creation timestamp")
     last_seen_at: datetime = Field(..., description="Last activity timestamp")
     total_bets: int = Field(..., description="Total number of bets in stream")
-    highest_multiplier: Optional[float] = Field(None, description="Highest multiplier achieved")
-    notes: Optional[str] = Field(None, description="User notes")
+    highest_multiplier: float | None = Field(
+        None, description="Highest multiplier achieved"
+    )
+    notes: str | None = Field(None, description="User notes")
 
 
 class StreamDetail(BaseModel):
@@ -80,25 +93,33 @@ class StreamDetail(BaseModel):
     created_at: datetime = Field(..., description="Stream creation timestamp")
     last_seen_at: datetime = Field(..., description="Last activity timestamp")
     total_bets: int = Field(..., description="Total number of bets in stream")
-    highest_multiplier: Optional[float] = Field(None, description="Highest multiplier achieved")
-    lowest_multiplier: Optional[float] = Field(None, description="Lowest multiplier achieved")
-    average_multiplier: Optional[float] = Field(None, description="Average multiplier")
-    notes: Optional[str] = Field(None, description="User notes")
-    recent_bets: List[BetRecord] = Field(default_factory=list, description="Recent bet records")
+    highest_multiplier: float | None = Field(
+        None, description="Highest multiplier achieved"
+    )
+    lowest_multiplier: float | None = Field(
+        None, description="Lowest multiplier achieved"
+    )
+    average_multiplier: float | None = Field(None, description="Average multiplier")
+    notes: str | None = Field(None, description="User notes")
+    recent_bets: list[BetRecord] = Field(
+        default_factory=list, description="Recent bet records"
+    )
 
 
 class TailResponse(BaseModel):
     """Response model for incremental updates via tail endpoint."""
 
-    bets: List[BetRecord] = Field(..., description="New bet records since last poll")
-    last_id: Optional[int] = Field(None, description="Highest ID in this response for next poll")
+    bets: list[BetRecord] = Field(..., description="New bet records since last poll")
+    last_id: int | None = Field(
+        None, description="Highest ID in this response for next poll"
+    )
     has_more: bool = Field(..., description="Whether more records are available")
 
 
 class StreamListResponse(BaseModel):
     """Response model for streams listing endpoint."""
 
-    streams: List[StreamSummary] = Field(..., description="List of stream summaries")
+    streams: list[StreamSummary] = Field(..., description="List of stream summaries")
     total: int = Field(..., description="Total number of streams")
     limit: int = Field(..., description="Applied limit")
     offset: int = Field(..., description="Applied offset")
@@ -107,7 +128,7 @@ class StreamListResponse(BaseModel):
 class BetListResponse(BaseModel):
     """Response model for paginated bet listing."""
 
-    bets: List[BetRecord] = Field(..., description="List of bet records")
+    bets: list[BetRecord] = Field(..., description="List of bet records")
     total: int = Field(..., description="Total number of bets matching criteria")
     limit: int = Field(..., description="Applied limit")
     offset: int = Field(..., description="Applied offset")
@@ -117,29 +138,35 @@ class BetListResponse(BaseModel):
 class StreamUpdateRequest(BaseModel):
     """Request model for updating stream metadata."""
 
-    notes: Optional[str] = Field(None, description="User notes for the stream")
+    notes: str | None = Field(None, description="User notes for the stream")
 
 
 class StreamStatsResponse(BaseModel):
     """Response model for stream statistics."""
 
     total_bets: int = Field(..., description="Total number of bets")
-    highest_multiplier: Optional[float] = Field(
+    highest_multiplier: float | None = Field(
         None, description="Highest round result multiplier"
     )
-    lowest_multiplier: Optional[float] = Field(None, description="Lowest multiplier")
-    average_multiplier: Optional[float] = Field(None, description="Average multiplier")
+    lowest_multiplier: float | None = Field(None, description="Lowest multiplier")
+    average_multiplier: float | None = Field(None, description="Average multiplier")
     total_amount: float = Field(..., description="Total amount wagered")
     total_payout: float = Field(..., description="Total payout amount")
-    difficulty_breakdown: dict[str, int] = Field(default_factory=dict, description="Count by difficulty")
+    difficulty_breakdown: dict[str, int] = Field(
+        default_factory=dict, description="Count by difficulty"
+    )
 
 
 class StreamDeleteResponse(BaseModel):
     """Response model for stream deletion."""
 
-    deleted: bool = Field(..., description="Whether the stream was successfully deleted")
+    deleted: bool = Field(
+        ..., description="Whether the stream was successfully deleted"
+    )
     stream_id: UUID = Field(..., description="ID of the deleted stream")
-    bets_deleted: int = Field(..., description="Number of bets that were deleted with the stream")
+    bets_deleted: int = Field(
+        ..., description="Number of bets that were deleted with the stream"
+    )
 
 
 class BookmarkCreate(BaseModel):
@@ -149,13 +176,13 @@ class BookmarkCreate(BaseModel):
     multiplier: float = Field(
         ..., description="Round result multiplier of the bet to bookmark"
     )
-    note: Optional[str] = Field(None, description="Optional note for the bookmark")
+    note: str | None = Field(None, description="Optional note for the bookmark")
 
 
 class BookmarkUpdate(BaseModel):
     """Request model for updating a bookmark."""
 
-    note: Optional[str] = Field(None, description="Updated note for the bookmark")
+    note: str | None = Field(None, description="Updated note for the bookmark")
 
 
 class BookmarkResponse(BaseModel):
@@ -165,7 +192,7 @@ class BookmarkResponse(BaseModel):
     stream_id: UUID = Field(..., description="Stream ID")
     nonce: int = Field(..., description="Nonce of the bookmarked bet")
     multiplier: float = Field(..., description="Multiplier of the bookmarked bet")
-    note: Optional[str] = Field(None, description="Bookmark note")
+    note: str | None = Field(None, description="Bookmark note")
     created_at: datetime = Field(..., description="Bookmark creation timestamp")
 
 
@@ -191,7 +218,9 @@ class SnapshotResponse(BaseModel):
 class SnapshotDeleteResponse(BaseModel):
     """Response model for snapshot deletion."""
 
-    deleted: bool = Field(..., description="Whether the snapshot was successfully deleted")
+    deleted: bool = Field(
+        ..., description="Whether the snapshot was successfully deleted"
+    )
     snapshot_id: int = Field(..., description="ID of the deleted snapshot")
 
 
@@ -214,7 +243,9 @@ class MultiplierMetrics(BaseModel):
     std_gap: float = Field(..., description="Standard deviation of gaps")
     p90_gap: float = Field(..., description="90th percentile gap")
     max_gap: int = Field(..., description="Maximum gap observed")
-    eta_theoretical: Optional[float] = Field(None, description="Theoretical ETA based on probability tables")
+    eta_theoretical: float | None = Field(
+        None, description="Theoretical ETA based on probability tables"
+    )
     eta_observed: float = Field(..., description="Observed ETA based on mean gap")
 
 
@@ -225,38 +256,54 @@ class StreamMetrics(BaseModel):
     total_bets: int = Field(..., description="Total number of bets in stream")
     highest_multiplier: float = Field(..., description="Highest multiplier achieved")
     hit_rate: float = Field(..., description="Hits per minute")
-    multiplier_stats: List[MultiplierMetrics] = Field(default_factory=list, description="Per-multiplier statistics")
-    density_buckets: dict[str, int] = Field(default_factory=dict, description="Density buckets (bucket_id -> count)")
-    top_peaks: List[PeakRecord] = Field(default_factory=list, description="Top N highest multipliers")
+    multiplier_stats: list[MultiplierMetrics] = Field(
+        default_factory=list, description="Per-multiplier statistics"
+    )
+    density_buckets: dict[str, int] = Field(
+        default_factory=dict, description="Density buckets (bucket_id -> count)"
+    )
+    top_peaks: list[PeakRecord] = Field(
+        default_factory=list, description="Top N highest multipliers"
+    )
 
 
 class HitRecord(BaseModel):
     """Individual hit record for hit-centric analysis."""
 
     nonce: int = Field(..., description="Bet nonce")
-    bucket: float = Field(..., description="Multiplier bucket (rounded to 2 decimal places)")
-    distance_prev: Optional[int] = Field(None, description="Distance to previous hit of same bucket")
+    bucket: float = Field(
+        ..., description="Multiplier bucket (rounded to 2 decimal places)"
+    )
+    distance_prev: int | None = Field(
+        None, description="Distance to previous hit of same bucket"
+    )
     id: int = Field(..., description="Database ID for reference")
-    date_time: Optional[datetime] = Field(None, description="Original bet datetime from Antebot")
+    date_time: datetime | None = Field(
+        None, description="Original bet datetime from Antebot"
+    )
 
 
 class HitQueryResponse(BaseModel):
     """Response model for hit query endpoint."""
 
-    hits: List[HitRecord] = Field(..., description="List of hit records")
-    prev_nonce_before_range: Optional[int] = Field(None, description="Previous nonce before range for distance calculation")
+    hits: list[HitRecord] = Field(..., description="List of hit records")
+    prev_nonce_before_range: int | None = Field(
+        None, description="Previous nonce before range for distance calculation"
+    )
     total_in_range: int = Field(..., description="Total hits in the requested range")
-    has_more: bool = Field(..., description="Whether more hits are available beyond the limit")
+    has_more: bool = Field(
+        ..., description="Whether more hits are available beyond the limit"
+    )
 
 
 class BucketStats(BaseModel):
     """Statistics for a specific bucket."""
 
     count: int = Field(..., description="Number of hits")
-    median: Optional[float] = Field(None, description="Median distance between hits")
-    mean: Optional[float] = Field(None, description="Mean distance between hits")
-    min: Optional[int] = Field(None, description="Minimum distance between hits")
-    max: Optional[int] = Field(None, description="Maximum distance between hits")
+    median: float | None = Field(None, description="Median distance between hits")
+    mean: float | None = Field(None, description="Mean distance between hits")
+    min: int | None = Field(None, description="Minimum distance between hits")
+    max: int | None = Field(None, description="Maximum distance between hits")
     method: str = Field(..., description="Calculation method: 'exact' or 'approximate'")
 
 
@@ -270,19 +317,31 @@ class RangeStats(BaseModel):
 class HitStatsResponse(BaseModel):
     """Response model for hit statistics endpoint."""
 
-    stats_by_range: List[RangeStats] = Field(..., description="Statistics grouped by range")
+    stats_by_range: list[RangeStats] = Field(
+        ..., description="Statistics grouped by range"
+    )
 
 
 class GlobalHitStatsResponse(BaseModel):
     """Response model for global hit statistics endpoint."""
 
-    global_stats: BucketStats = Field(..., description="Global statistics across all ranges")
-    theoretical_eta: Optional[float] = Field(None, description="Theoretical ETA based on probability")
-    confidence_interval: Optional[List[float]] = Field(None, description="Confidence interval for median estimate")
+    global_stats: BucketStats = Field(
+        ..., description="Global statistics across all ranges"
+    )
+    theoretical_eta: float | None = Field(
+        None, description="Theoretical ETA based on probability"
+    )
+    confidence_interval: list[float] | None = Field(
+        None, description="Confidence interval for median estimate"
+    )
 
 
 class BatchHitQueryResponse(BaseModel):
     """Response model for batch hit query endpoint."""
 
-    hits_by_bucket: dict[str, List[HitRecord]] = Field(..., description="Hits grouped by bucket")
-    stats_by_bucket: dict[str, BucketStats] = Field(..., description="Statistics grouped by bucket")
+    hits_by_bucket: dict[str, list[HitRecord]] = Field(
+        ..., description="Hits grouped by bucket"
+    )
+    stats_by_bucket: dict[str, BucketStats] = Field(
+        ..., description="Statistics grouped by bucket"
+    )

@@ -7,7 +7,6 @@ development. Uses python-dotenv if available to load a local .env file.
 
 import os
 from dataclasses import dataclass
-from typing import List
 
 try:
     # Optional: load .env if present
@@ -24,14 +23,14 @@ def _get_env(name: str, default: str) -> str:
     return value if value not in (None, "") else default
 
 
-def _split_csv(value: str) -> List[str]:
+def _split_csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    api_cors_origins: List[str]
+    api_cors_origins: list[str]
     max_nonces: int
     ingest_token: str | None
     api_host: str
@@ -56,7 +55,7 @@ def get_settings() -> Settings:
 
     # API server configuration
     api_host = _get_env("API_HOST", "127.0.0.1")
-    
+
     api_port_raw = _get_env("API_PORT", "8000")
     try:
         api_port = int(api_port_raw)

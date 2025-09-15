@@ -10,9 +10,8 @@ The golden test vector MUST pass for correctness validation.
 
 import hashlib
 import hmac
-import json
 import time
-from typing import Dict, List, Tuple, Any
+from typing import Any
 
 # Engine version for traceability
 ENGINE_VERSION = "pump-1.0.0"
@@ -140,7 +139,7 @@ for difficulty, M in M_VALUES.items():
 
 def generate_floats_for_nonce(
     server_seed: str, client_seed: str, nonce: int
-) -> List[float]:
+) -> list[float]:
     """
     Generate float sequence for a given nonce using HMAC-SHA256.
 
@@ -188,7 +187,7 @@ def generate_floats_for_nonce(
     return floats
 
 
-def selection_shuffle(floats: List[float]) -> List[int]:
+def selection_shuffle(floats: list[float]) -> list[int]:
     """
     Perform selection shuffle to generate permutation of positions 1-25.
 
@@ -229,8 +228,8 @@ def selection_shuffle(floats: List[float]) -> List[int]:
 
 
 def calculate_pump_result(
-    permutation: List[int], difficulty: str
-) -> Tuple[int, float, int]:
+    permutation: list[int], difficulty: str
+) -> tuple[int, float, int]:
     """
     Calculate pump result from permutation and difficulty.
 
@@ -263,7 +262,7 @@ def calculate_pump_result(
 
 def verify_pump(
     server_seed: str, client_seed: str, nonce: int, difficulty: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Verify a single nonce for Pump game.
 
@@ -295,8 +294,8 @@ def scan_pump(
     start: int,
     end: int,
     difficulty: str,
-    targets: List[float],
-) -> Tuple[Dict[float, List[int]], Dict[str, Any]]:
+    targets: list[float],
+) -> tuple[dict[float, list[int]], dict[str, Any]]:
     """
     Scan a range of nonces for Pump analysis.
 

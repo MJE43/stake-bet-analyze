@@ -34,10 +34,10 @@ export function useLiveStreams(options: UseLiveStreamsOptions = {}): UseLiveStre
     refetchInterval,
     staleTime: 30 * 1000, // Consider data stale after 30 seconds
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-    retry: (failureCount, error) => {
+    retry: (failureCount, error: Error | unknown) => {
       // Retry up to 3 times for network errors, but not for 4xx errors
       if (failureCount >= 3) return false;
-      const status = (error as any)?.apiError?.status;
+      const status = (error as Error & { apiError?: { status?: number } })?.apiError?.status;
       return !status || status >= 500;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -48,7 +48,7 @@ export function useLiveStreams(options: UseLiveStreamsOptions = {}): UseLiveStre
     total: query.data?.total || 0,
     isLoading: query.isLoading,
     isError: query.isError,
-    error: query.error,
+    error: query.error as Error | null,
     refetch: query.refetch,
     isFetching: query.isFetching,
   };

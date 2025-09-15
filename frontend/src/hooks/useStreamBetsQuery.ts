@@ -71,9 +71,9 @@ export function useStreamBetsQuery(
     enabled: enabled && !!streamId,
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
-    retry: (failureCount, error) => {
+    retry: (failureCount, error: Error | unknown) => {
       if (failureCount >= 3) return false;
-      const status = (error as any)?.apiError?.status;
+      const status = (error as Error & { apiError?: { status?: number } })?.apiError?.status;
       return !status || status >= 500;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -98,10 +98,10 @@ export function useStreamBetsQuery(
         // Add new bets to the beginning of the first page
         queryClient.setQueryData(
           ["streamBets", streamId, mergedFilters],
-          (old: any) => {
+          (old: { pages: { bets: BetRecord[]; total: number }[] } | undefined) => {
             if (!old?.pages?.length) return old;
 
-            const firstPage = old.pages[0];
+             const firstPage = old.pages[0]!;
             const newBets = response.data.bets;
 
             // Deduplicate and merge
@@ -151,10 +151,10 @@ export function useStreamBetsQuery(
 
   return {
     bets: allBets,
-    total: query.data?.pages[0]?.total ?? 0,
+    total: query.data?.pages?.[0]?.total ?? 0,
     isLoading: query.isLoading,
     isError: query.isError,
-    error: query.error || null,
+    error: query.error as Error | null,
     refetch: query.refetch,
     isFetching: query.isFetching,
     hasNextPage: !!query.hasNextPage,

@@ -14,11 +14,11 @@ export const useEnhancedLiveStreams = (filters?: StreamListFilters) => {
   const query = useQuery({
     queryKey: ["liveStreams", filters],
     queryFn: () => liveStreamsApi.list(filters).then((res) => res.data),
-    staleTime: 2 * 1000, // 2 seconds - allow frequent updates
-    refetchInterval: 2 * 1000, // Auto-refetch every 2 seconds
-    retry: (failureCount, error: any) => {
-      return shouldRetry(error) && failureCount < 3;
-    },
+     staleTime: 2 * 1000, // 2 seconds - allow frequent updates
+     refetchInterval: 2 * 1000, // Auto-refetch every 2 seconds
+     retry: (failureCount, error: Error | unknown) => {
+       return shouldRetry(error) && failureCount < 3;
+     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
@@ -44,11 +44,11 @@ export const useEnhancedStreamDetail = (id: string) => {
     queryKey: ["liveStreams", id],
     queryFn: () => liveStreamsApi.get(id).then((res) => res.data),
     enabled: !!id,
-    staleTime: 1 * 1000, // 1 second - allow very frequent updates
-    refetchInterval: 2 * 1000, // Auto-refetch every 2 seconds
-    retry: (failureCount, error: any) => {
-      return shouldRetry(error) && failureCount < 3;
-    },
+     staleTime: 1 * 1000, // 1 second - allow very frequent updates
+     refetchInterval: 2 * 1000, // Auto-refetch every 2 seconds
+     retry: (failureCount, error: Error | unknown) => {
+       return shouldRetry(error) && failureCount < 3;
+     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
@@ -64,11 +64,11 @@ export const useEnhancedStreamBets = (
     queryKey: ["liveStreams", id, "bets", filters],
     queryFn: () => liveStreamsApi.getBets(id, filters).then((res) => res.data),
     enabled: !!id,
-    staleTime: 1 * 1000, // 1 second - allow very frequent updates
-    refetchInterval: 1 * 1000, // Auto-refetch every 1 second for bets
-    retry: (failureCount, error: any) => {
-      return shouldRetry(error) && failureCount < 3;
-    },
+     staleTime: 1 * 1000, // 1 second - allow very frequent updates
+     refetchInterval: 1 * 1000, // Auto-refetch every 1 second for bets
+     retry: (failureCount, error: Error | unknown) => {
+       return shouldRetry(error) && failureCount < 3;
+     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
@@ -107,7 +107,7 @@ export const useEnhancedUpdateStream = () => {
     onError: (error) => {
       libShowErrorToast(error, "Failed to update stream");
     },
-    retry: (failureCount, error: any) => {
+    retry: (failureCount, error: Error | unknown) => {
       return shouldRetry(error) && failureCount < 2;
     },
     retryDelay: 1000,

@@ -115,7 +115,7 @@ export function useStreamTail(
         error
       );
     }
-  }, [streamId, isPolling, lastId, tailQuery, queryClient, onNewBets, onError]);
+  }, [streamId, isPolling, tailQuery, queryClient, onNewBets, onError]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -134,7 +134,7 @@ export function useStreamTail(
 
     // Fetch immediately
     fetchNewBets();
-  }, [streamId, pollingInterval]); // Remove fetchNewBets from dependencies
+  }, [streamId, pollingInterval, fetchNewBets]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -165,7 +165,7 @@ export function useStreamTail(
     return () => {
       stopPolling();
     };
-  }, [enabled, streamId]); // Remove function dependencies to prevent loops
+  }, [enabled, streamId, startPolling, stopPolling]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {

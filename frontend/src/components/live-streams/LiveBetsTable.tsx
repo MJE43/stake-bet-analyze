@@ -29,23 +29,12 @@ interface LiveBetsTableProps {
   isFetching: boolean;
 }
 
-interface LiveBetsTableProps {
-  streamId: string;
-  isPolling?: boolean;
-  pollingInterval?: number;
-}
-
-const fetchSize = 100;
-
 const LiveBetsTable = ({
-  streamId,
   isPolling = true,
-  pollingInterval = 2000,
   bets,
   total,
   isLoading,
   isError,
-  error,
   fetchNextPage,
   hasNextPage,
   isFetching,

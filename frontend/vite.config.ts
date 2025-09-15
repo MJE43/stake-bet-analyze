@@ -16,4 +16,28 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split large dependencies into separate chunks
+          recharts: ['recharts'],
+          'mantine-core': ['@mantine/core'],
+          'mantine-table': ['mantine-react-table'],
+          'framer-motion': ['framer-motion'],
+          'react-query': ['@tanstack/react-query'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // Increase warning limit
+  },
+  optimizeDeps: {
+    include: [
+      'recharts',
+      '@mantine/core',
+      'mantine-react-table',
+      'framer-motion',
+      '@tanstack/react-query',
+    ],
+  },
 });

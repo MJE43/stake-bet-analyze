@@ -10,7 +10,6 @@ import {
 
 // Enhanced live streams hook with error handling and notifications
 export const useEnhancedLiveStreams = (filters?: StreamListFilters) => {
-  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["liveStreams", filters],

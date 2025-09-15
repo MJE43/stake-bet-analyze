@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { runsApi, verifyApi, liveStreamsApi } from "./api";
-import type { RunListFilters, HitsFilters, RunCreateRequest, StreamListFilters, StreamBetsFilters } from "./api";
+import type { RunListFilters, HitsFilters, RunCreateRequest, StreamListFilters, StreamBetsFilters, Hit } from "./api";
 
 // List runs with filters
 export const useRuns = (filters?: RunListFilters) => {
@@ -18,6 +18,8 @@ export const useRun = (id: string) => {
     queryFn: () => runsApi.get(id).then((res) => res.data),
     enabled: !!id,
     staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes cache
+    keepPreviousData: true,
   });
 };
 
@@ -29,6 +31,60 @@ export const useRunHits = (id: string, filters?: HitsFilters) => {
     enabled: !!id,
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
+};
+
+// Paginated hits query for MRT table with server-side pagination/filtering
+export interface UsePaginatedHitsQueryOptions {
+  runId: string;
+  filters: HitsFilters;
+  enabled?: boolean;
+}
+
+export interface UsePaginatedHitsQueryResult {
+  hits: Hit[];
+  total: number;
+  pageCount: number;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => void;
+  isFetching: boolean;
+}
+
+export const usePaginatedHitsQuery = (
+  options: UsePaginatedHitsQueryOptions
+): UsePaginatedHitsQueryResult => {
+  const { runId, filters, enabled = true } = options;
+
+  const query = useQuery({
+    queryKey: ["run-hits", runId, filters],
+    queryFn: () => runsApi.getHits(runId, filters).then((res) => res.data),
+    enabled: enabled && !!runId,
+    staleTime: 10 * 60 * 1000, // 10 minutes for static data
+    gcTime: 30 * 60 * 1000, // 30 minutes cache
+    keepPreviousData: true,
+    retry: (failureCount, error) => {
+      if (failureCount >= 3) return false;
+      const status = (error as any)?.apiError?.status;
+      return !status || status >= 500;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+
+  const hits = query.data?.rows || [];
+  const total = query.data?.total || 0;
+  const pageCount = Math.ceil(total / (filters.limit || 50));
+
+  return {
+    hits,
+    total,
+    pageCount,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error || null,
+    refetch: query.refetch,
+    isFetching: query.isFetching,
+  };
 };
 
 // Create run mutation

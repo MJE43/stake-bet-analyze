@@ -83,7 +83,7 @@ export function useStreamBetsQuery(
   const allBets = useMemo(() => {
     const flattened = query.data?.pages.flatMap((page) => page.bets) ?? [];
     // Cap total bets if exceeding reasonable limit
-    return flattened.slice(0, effectiveMaxPages * mergedFilters.limit);
+    return flattened.slice(0, effectiveMaxPages * (mergedFilters.limit || 1000));
   }, [query.data, effectiveMaxPages, mergedFilters.limit]);
 
   // Real-time polling for new bets

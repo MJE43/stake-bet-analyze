@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { liveStreamsApi } from "@/lib/api";
 import type { StreamListFilters, StreamBetsFilters } from "@/lib/api";
-import { useStreamNotifications } from "./useStreamNotifications";
+// import { useStreamNotifications } from "./useStreamNotifications";
 import {
   shouldRetry,
   showErrorToast as libShowErrorToast,
@@ -23,19 +23,19 @@ export const useEnhancedLiveStreams = (filters?: StreamListFilters) => {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  const { showSuccessToast, showErrorToast, showWarningToast } =
-    useStreamNotifications(query.data?.streams);
+  // const { showSuccessToast, showErrorToast, showWarningToast } =
+  // useStreamNotifications(query.data?.streams);
 
-  const refetch = () => {
-    return queryClient.invalidateQueries({ queryKey: ["liveStreams"] });
-  };
+  //const refetch = () => {
+  //return queryClient.invalidateQueries({ queryKey: ["liveStreams"] });
+  //};
 
   return {
     ...query,
-    refetch,
-    showSuccessToast,
-    showErrorToast,
-    showWarningToast,
+    //refetch,
+    //showSuccessToast,
+    //showErrorToast,
+    //showWarningToast,
   };
 };
 

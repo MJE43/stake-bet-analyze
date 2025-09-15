@@ -11,6 +11,7 @@ export interface UseStreamBetsQueryOptions {
   filters?: StreamBetsFilters;
   enabled?: boolean;
   pollingInterval?: number;
+  maxPages?: number;
 }
 
 export interface UseStreamBetsQueryResult {
@@ -44,6 +45,8 @@ export function useStreamBetsQuery(
     [filters]
   );
 
+  const effectiveMaxPages = options.maxPages || 10; // Default to 10 pages (10k bets)
+
   // Infinite query for initial data + pagination
   const query = useInfiniteQuery({
     queryKey: ["streamBets", streamId, mergedFilters],
@@ -55,6 +58,9 @@ export function useStreamBetsQuery(
       return response.data;
     },
     getNextPageParam: (lastPage, pages) => {
+      if (pages.length >= effectiveMaxPages) {
+        return undefined;
+      }
       const totalFetched = pages.reduce(
         (sum, page) => sum + page.bets.length,
         0
@@ -73,11 +79,12 @@ export function useStreamBetsQuery(
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Flatten all pages into single array
-  const allBets = useMemo(
-    () => query.data?.pages.flatMap((page) => page.bets) ?? [],
-    [query.data]
-  );
+  // Flatten all pages into single array, capped if needed
+  const allBets = useMemo(() => {
+    const flattened = query.data?.pages.flatMap((page) => page.bets) ?? [];
+    // Cap total bets if exceeding reasonable limit
+    return flattened.slice(0, effectiveMaxPages * mergedFilters.limit);
+  }, [query.data, effectiveMaxPages, mergedFilters.limit]);
 
   // Real-time polling for new bets
   const pollForNewBets = useCallback(async () => {

@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StreamDetailHeader } from "@/components/live-streams/StreamDetailHeader";
 import { StreamInfoCard } from "@/components/live-streams/StreamInfoCard";
-import { BetsTableCard } from "@/test/BetsTableCard";
+import { BetsTableCard } from "@/components/live-streams/BetsTableCard";
 
 const LiveStreamDetailContent = () => {
   const { id } = useParams<{ id: string }>();
@@ -186,6 +186,15 @@ const LiveStreamDetailContent = () => {
           streamId={id!}
           isPolling={isPolling}
           highFrequencyMode={highFrequencyMode}
+          bets={betsQuery.bets}
+          total={betsQuery.total}
+          isLoading={betsQuery.isLoading}
+          isError={betsQuery.isError}
+          error={betsQuery.error}
+          fetchNextPage={betsQuery.fetchNextPage}
+          refetch={betsQuery.refetch}
+          hasNextPage={betsQuery.hasNextPage}
+          isFetching={betsQuery.isFetching}
         />
       </div>
     </div>

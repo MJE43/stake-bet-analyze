@@ -70,7 +70,7 @@ export const PerformanceChart = ({
   // Initialize Web Worker
   useEffect(() => {
     if (typeof Worker !== 'undefined') {
-      workerRef.current = new Worker(new URL('../workers/histogram.worker.ts', import.meta.url), {
+      workerRef.current = new Worker(new URL('../../workers/histogram.worker.ts', import.meta.url), {
         type: 'module'
       });
 

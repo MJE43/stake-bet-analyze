@@ -329,7 +329,6 @@ const HitsTable = ({
     },
     enableStickyHeader: true,
     enableStickyFooter: true,
-    rowVirtualizerProps: { overscan: 5 },
   });
 
   return (

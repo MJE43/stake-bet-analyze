@@ -8,7 +8,7 @@ import { HeroSection } from "../components/run/HeroSection";
 import { InsightCard } from "../components/run/InsightCard";
 
 // Lazy load performance-heavy components
-const PerformanceChart = lazy(() => import("../components/run/PerformanceChart"));
+const PerformanceChart = lazy(() => import("../components/run/PerformanceChart").then(module => ({ default: module.PerformanceChart })));
 const HitsTable = lazy(() => import("../components/run/HitsTable"));
 import {
   Card,

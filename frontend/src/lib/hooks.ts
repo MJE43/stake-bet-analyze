@@ -19,7 +19,7 @@ export const useRun = (id: string) => {
     enabled: !!id,
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes cache
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 };
 
@@ -62,7 +62,7 @@ export const usePaginatedHitsQuery = (
     enabled: enabled && !!runId,
     staleTime: 10 * 60 * 1000, // 10 minutes for static data
     gcTime: 30 * 60 * 1000, // 30 minutes cache
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
     retry: (failureCount, error) => {
       if (failureCount >= 3) return false;
       const status = (error as any)?.apiError?.status;
@@ -71,8 +71,8 @@ export const usePaginatedHitsQuery = (
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  const hits = query.data?.rows || [];
-  const total = query.data?.total || 0;
+  const hits = (query.data as any)?.rows || [];
+  const total = (query.data as any)?.total || 0;
   const pageCount = Math.ceil(total / (filters.limit || 50));
 
   return {

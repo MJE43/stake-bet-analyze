@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StreamDetailHeader } from "@/components/live-streams/StreamDetailHeader";
 import { StreamInfoCard } from "@/components/live-streams/StreamInfoCard";
-import { BetsTableCard } from "@/test/BetsTableCard";
+import { BetsTableCard } from "@/components/live-streams/BetsTableCard";
 
 const LiveStreamDetailContent = () => {
   const { id } = useParams<{ id: string }>();

@@ -186,6 +186,15 @@ const LiveStreamDetailContent = () => {
           streamId={id!}
           isPolling={isPolling}
           highFrequencyMode={highFrequencyMode}
+          bets={betsQuery.bets}
+          total={betsQuery.total}
+          isLoading={betsQuery.isLoading}
+          isError={betsQuery.isError}
+          error={betsQuery.error}
+          fetchNextPage={betsQuery.fetchNextPage}
+          refetch={betsQuery.refetch}
+          hasNextPage={betsQuery.hasNextPage}
+          isFetching={betsQuery.isFetching}
         />
       </div>
     </div>

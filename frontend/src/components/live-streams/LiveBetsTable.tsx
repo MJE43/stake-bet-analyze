@@ -4,23 +4,30 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
   type MRT_ColumnDef,
-  type MRT_ColumnFiltersState,
-  type MRT_SortingState,
   type MRT_Virtualizer,
 } from "mantine-react-table";
 import { Text, Badge, Group, Stack } from "@mantine/core";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  liveStreamsApi,
-  type BetRecord,
-  type StreamBetsFilters,
-} from "@/lib/api";
+import { type BetRecord } from "@/lib/api";
+
+interface LiveBetsTableProps {
+  streamId: string;
+  isPolling?: boolean;
+  pollingInterval?: number;
+  bets: BetRecord[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  fetchNextPage: () => void;
+  refetch: () => void;
+  hasNextPage: boolean;
+  isFetching: boolean;
+}
 
 interface LiveBetsTableProps {
   streamId: string;
@@ -34,13 +41,50 @@ const LiveBetsTable = ({
   streamId,
   isPolling = true,
   pollingInterval = 2000,
+  bets,
+  total,
+  isLoading,
+  isError,
+  error,
+  fetchNextPage,
+  hasNextPage,
+  isFetching,
 }: LiveBetsTableProps) => {
-  const queryClient = useQueryClient();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const rowVirtualizerInstanceRef =
     useRef<MRT_Virtualizer<HTMLDivElement, HTMLTableRowElement>>(null);
 
-  // State variables removed since we're using client-side filtering/sorting
+  const flatData = useMemo(() => bets, [bets]);
+
+  const totalDBRowCount = total;
+  const totalFetched = flatData.length;
+
+  // Debounced fetch more on scroll
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchMoreOnBottomReached = useCallback(
+    (containerRefElement?: HTMLDivElement | null) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        if (containerRefElement && hasNextPage && !isFetching) {
+          const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
+          if (scrollHeight - scrollTop - clientHeight < 400) {
+            fetchNextPage();
+          }
+        }
+      }, 100);
+    },
+    [fetchNextPage, hasNextPage, isFetching]
+  );
+
+  // Check if we need to fetch more data on mount
+  useEffect(() => {
+    if (hasNextPage && !isFetching) {
+      fetchMoreOnBottomReached(tableContainerRef.current);
+    }
+  }, [fetchMoreOnBottomReached, hasNextPage, isFetching]);
 
   // Define columns
   const columns = useMemo<MRT_ColumnDef<BetRecord>[]>(
@@ -313,99 +357,6 @@ const LiveBetsTable = ({
     []
   );
 
-  // Infinite query for bets data
-  const { data, fetchNextPage, isError, isFetching, isLoading } =
-    useInfiniteQuery({
-      queryKey: ["live-bets-table", streamId], // Simplified query key since filtering is client-side
-      queryFn: async ({ pageParam = 0 }) => {
-        const filters: StreamBetsFilters = {
-          offset: pageParam * fetchSize,
-          limit: fetchSize,
-          order: "id_desc", // Always get most recent first for live data
-        };
-
-        const response = await liveStreamsApi.getBets(streamId, filters);
-        return response.data;
-      },
-      getNextPageParam: (lastPage, pages) => {
-        const totalFetched = pages.reduce(
-          (sum, page) => sum + page.bets.length,
-          0
-        );
-        return totalFetched < lastPage.total ? pages.length : undefined;
-      },
-      initialPageParam: 0,
-      keepPreviousData: true,
-      refetchOnWindowFocus: false,
-      enabled: !!streamId,
-    });
-
-  const flatData = useMemo(
-    () => data?.pages.flatMap((page) => page.bets) ?? [],
-    [data]
-  );
-
-  const totalDBRowCount = data?.pages?.[0]?.total ?? 0;
-  const totalFetched = flatData.length;
-
-  // Fetch more data when scrolling near bottom
-  const fetchMoreOnBottomReached = useCallback(
-    (containerRefElement?: HTMLDivElement | null) => {
-      if (containerRefElement) {
-        const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
-        if (
-          scrollHeight - scrollTop - clientHeight < 400 &&
-          !isFetching &&
-          totalFetched < totalDBRowCount
-        ) {
-          fetchNextPage();
-        }
-      }
-    },
-    [fetchNextPage, isFetching, totalFetched, totalDBRowCount]
-  );
-
-  // Scroll to top effect removed since client-side filtering handles this automatically
-
-  // Check if we need to fetch more data on mount
-  useEffect(() => {
-    fetchMoreOnBottomReached(tableContainerRef.current);
-  }, [fetchMoreOnBottomReached]);
-
-  // Real-time polling for new data with debouncing
-  useEffect(() => {
-    if (!isPolling || !flatData.length) return;
-
-    let timeoutId: NodeJS.Timeout;
-    
-    const pollForUpdates = async () => {
-      try {
-        const lastId = Math.max(...flatData.map((bet) => bet.id));
-        const response = await liveStreamsApi.tail(streamId, lastId, true);
-
-        if (response.data.bets.length > 0) {
-          // Debounce rapid updates to reduce flash
-          clearTimeout(timeoutId);
-          timeoutId = setTimeout(() => {
-            queryClient.invalidateQueries({
-              queryKey: ["live-bets-table", streamId],
-              refetchType: 'active',
-            });
-          }, 100); // Small delay to batch rapid updates
-        }
-      } catch (error) {
-        console.error("Error polling for new bets:", error);
-      }
-    };
-
-    const interval = setInterval(pollForUpdates, pollingInterval);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeoutId);
-    };
-  }, [isPolling, pollingInterval, streamId, flatData, queryClient]);
-
   const table = useMantineReactTable({
     columns,
     data: flatData,
@@ -482,7 +433,7 @@ const LiveBetsTable = ({
     state: {
       isLoading,
       showAlertBanner: isError,
-      showProgressBars: false, // Disable progress bars to reduce flash
+      showProgressBars: isFetching, // Show progress during fetching
     },
     initialState: {
       showColumnFilters: true, // Show filters by default

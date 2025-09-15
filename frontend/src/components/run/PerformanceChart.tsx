@@ -30,6 +30,13 @@ interface PerformanceChartProps {
 
 type ChartType = "distribution" | "scatter" | "timeline" | "breakdown";
 
+interface HistogramBin {
+  range: string;
+  count: number;
+  min: number;
+  max: number;
+}
+
 const formatNumber = (n: number | string | null | undefined) => {
   if (n === undefined || n === null || Number.isNaN(Number(n))) return "—";
   return new Intl.NumberFormat().format(Number(n));
@@ -45,7 +52,7 @@ export const PerformanceChart = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chartType, setChartType] = useState<ChartType>("distribution");
-  const [histogramData, setHistogramData] = useState<any[] | null>(null);
+  const [histogramData, setHistogramData] = useState<HistogramBin[] | null>(null);
   const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
@@ -192,7 +199,32 @@ export const PerformanceChart = ({
       default:
         return null;
     }
-  }, [data, chartType, selectedMultiplier]);
+  }, [data, chartType, selectedMultiplier, histogramData]);
+
+  // Custom tooltip component
+  const CustomTooltip = useCallback(({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      name: string;
+      value: number;
+      color?: string;
+    }>;
+    label?: string;
+  }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-lg">
+          <p className="text-slate-300 text-sm font-medium">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} className="text-white text-sm">
+              {entry.name}: {formatNumber(entry.value)}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  }, []);
 
   // Memoize chart rendering functions
   const renderChart = useCallback(() => {
@@ -295,33 +327,7 @@ export const PerformanceChart = ({
       default:
         return null;
     }
-  }, [chartData, chartType]);
-
-interface TooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    name: string;
-    value: number;
-    color?: string;
-  }>;
-  label?: string;
-}
-
-const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-lg">
-        <p className="text-slate-300 text-sm font-medium">{label}</p>
-        {payload.map((entry, index) => (
-          <p key={index} className="text-white text-sm">
-            {entry.name}: {formatNumber(entry.value)}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+  }, [chartData, chartType, CustomTooltip]);
 
 
 

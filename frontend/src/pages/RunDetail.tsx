@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { useRun, useRunHits } from "../lib/hooks";
 import { RunActionsBar } from "../components/RunActionsBar";
-import { HitFilters } from "../components/HitFilters";
+ // import { HitFilters } from "../components/HitFilters"; // Pruned: Filters handled via local state
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { distancesApi, type DistanceStatsResponse } from "../lib/api";
 import {
@@ -599,7 +599,7 @@ const RunDetail = () => {
                         (selectedDistanceMultiplier ?? run.targets[0]) as number
                       }
                       onChangeSelected={(m) => setSelectedDistanceMultiplier(m)}
-                    />
+            />  // Filters UI pruned; state intact */
                   )}
                 </CardContent>
               )}
@@ -614,7 +614,7 @@ const RunDetail = () => {
               <CardTitle>Hits ({filteredHitsTotal.toLocaleString()})</CardTitle>
             </div>
             {/* Hit Filters */}
-            <HitFilters
+            {/* <HitFilters
               minMultiplier={minMultiplier}
               selectedTargets={selectedTargets}
               availableTargets={run.targets}

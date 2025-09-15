@@ -14,6 +14,7 @@
         "clean": "if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; if (Test-Path .vite) { Remove-Item -Recurse -Force .vite }"
     },
     "dependencies": {
+        "@heroicons/react": "^2.2.0",
         "@hookform/resolvers": "^5.2.1",
         "@mantine/core": "^6.0.22",
         "@mantine/hooks": "^6.0.22",

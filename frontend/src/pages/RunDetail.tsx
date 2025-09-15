@@ -599,7 +599,7 @@ const RunDetail = () => {
                         (selectedDistanceMultiplier ?? run.targets[0]) as number
                       }
                       onChangeSelected={(m) => setSelectedDistanceMultiplier(m)}
-            />  // Filters UI pruned; state intact */
+                    />
                   )}
                 </CardContent>
               )}
@@ -615,15 +615,15 @@ const RunDetail = () => {
             </div>
             {/* Hit Filters */}
             {/* <HitFilters
-              minMultiplier={minMultiplier}
-              selectedTargets={selectedTargets}
-              availableTargets={run.targets}
-              onMinMultiplierChange={(value) => {
-                setMinMultiplier(value);
-                setHitsPage(0);
-              }}
-              onResetFilters={handleResetFilters}
-            />
+               minMultiplier={minMultiplier}
+               selectedTargets={selectedTargets}
+               availableTargets={run.targets}
+               onMinMultiplierChange={(value) => {
+                 setMinMultiplier(value);
+                 setHitsPage(0);
+               }}
+               onResetFilters={handleResetFilters}
+             /> */}
           </CardHeader>
 
           <CardContent className="p-0">

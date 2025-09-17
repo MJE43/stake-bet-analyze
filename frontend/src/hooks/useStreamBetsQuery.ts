@@ -9,6 +9,7 @@ export interface UseStreamBetsQueryOptions {
   enabled?: boolean;
   pollingInterval?: number;
   maxPages?: number;
+  includeDistance?: boolean;
 }
 
 export interface UseStreamBetsQueryResult {
@@ -32,7 +33,7 @@ export interface UseStreamBetsQueryResult {
 export function useStreamBetsQuery(
   options: UseStreamBetsQueryOptions
 ): UseStreamBetsQueryResult {
-  const { streamId, filters, enabled = true, pollingInterval = 2000 } = options;
+  const { streamId, filters, enabled = true, pollingInterval = 2000, includeDistance = false } = options;
   const queryClient = useQueryClient();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -89,7 +90,7 @@ export function useStreamBetsQuery(
 
     try {
       const lastId = Math.max(...allBets.map((bet) => bet.id));
-      const response = await liveStreamsApi.tail(streamId, lastId);
+      const response = await liveStreamsApi.tail(streamId, lastId, includeDistance);
 
       if (response.data.bets.length > 0) {
         // Add new bets to the beginning of the first page
@@ -131,7 +132,7 @@ export function useStreamBetsQuery(
     } catch (error) {
       console.error("Error polling for new bets:", error);
     }
-  }, [allBets, enabled, streamId, mergedFilters, queryClient]);
+  }, [allBets, enabled, streamId, mergedFilters, queryClient, includeDistance]);
 
   // Set up polling interval
   useEffect(() => {

@@ -44,6 +44,7 @@ const LiveStreamDetailContent = () => {
     filters: betsFilters,
     enabled: isPolling,
     pollingInterval: highFrequencyMode ? 500 : 2000,
+    includeDistance: true,
   });
 
   const {

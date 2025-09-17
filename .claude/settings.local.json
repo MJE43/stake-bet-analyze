@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/mike/stake-bet-analyze/**)",
+      "Bash(cp sessions/tasks/TEMPLATE.md sessions/tasks/m-improve-livetable-memoization.md)",
+      "Bash(if [ -f .gitmodules ])",
+      "Bash(then echo \"Super-repo detected\")",
+      "Bash(else echo \"Standard repository\")",
+      "Bash(fi)",
+      "Bash(git checkout main)",
+      "Bash(git pull origin main)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

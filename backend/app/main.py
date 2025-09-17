@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import get_settings
 from .db import create_db_and_tables
 from .routers import runs, verify
-from .routers.live_streams import router as live_streams_router
+from .routers.streams.router import router as live_streams_router
 
 settings = get_settings()
 

@@ -297,7 +297,7 @@ const LiveBetsTable = ({
   const totalDBRowCount = total;
   const totalFetched = flatData.length;
 
-  // Optimized fetch more on scroll with requestAnimationFrame
+  // Debounced fetch more on scroll with better cleanup
   const fetchMoreOnBottomReached = useCallback(
     (containerRefElement?: HTMLDivElement | null) => {
       if (containerRefElement && hasNextPage && !isFetching) {

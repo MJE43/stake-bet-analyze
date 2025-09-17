@@ -1,210 +1,147 @@
-# AGENTS.md
+# CLAUDE.sessions.md
 
-## Project Overview
+This file provides collaborative guidance and philosophy when using the Claude Code Sessions system.
 
-This is a full-stack web application called "Pump Analyzer Web" that enables users to deterministically replay Stake Pump game outcomes for provably-fair verification. The application analyzes server/client seed pairs over a range of nonces to identify patterns and hits for specific multiplier targets.
+## Collaboration Philosophy
 
-### Core Technologies
+**Core Principles**:
+- **Investigate patterns** - Look for existing examples, understand established conventions, don't reinvent what already exists
+- **Confirm approach** - Explain your reasoning, show what you found in the codebase, get consensus before proceeding  
+- **State your case if you disagree** - Present multiple viewpoints when architectural decisions have trade-offs
+- When working on highly standardized tasks: Provide SOTA (State of the Art) best practices
+- When working on paradigm-breaking approaches: Generate "opinion" through rigorous deductive reasoning from available evidence
 
-- **Backend:** FastAPI (Python 3.12+) with SQLModel/SQLite
-- **Frontend:** React 18 + TypeScript + Vite with TanStack Query
-- **Database:** SQLite (via aiosqlite) with SQLModel ORM
-- **Package Management:** uv (backend), npm (frontend)
+## Task Management
 
-### Project Structure
+### Best Practices
+- One task at a time (check .claude/state/current_task.json)
+- Update work logs as you progress  
+- Mark todos as completed immediately after finishing
 
-```
-pump-analyzer/
-├── backend/
-│   ├── app/
-│   │   ├── core/          # Configuration and utilities
-│   │   ├── engine/        # Core analysis algorithms
-│   │   ├── models/        # Database models
-│   │   ├── routers/       # API endpoints
-│   │   ├── schemas/       # Pydantic data schemas
-│   │   ├── db.py          # Database setup
-│   │   └── main.py        # FastAPI app entry point
-│   ├── tests/             # Backend test suite
-│   ├── start_server.py    # Development server entry point
-│   ├── requirements.txt   # Python dependencies
-│   ├── pyproject.toml     # Project configuration
-│   └── .env.example       # Environment variables template
-├── frontend/
-│   ├── src/
-│   │   ├── components/    # React UI components
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── lib/           # API clients and utilities
-│   │   ├── pages/         # Page components (RunsList, NewRun, RunDetail)
-│   │   ├── styles/        # CSS and styling
-│   │   └── App.tsx        # Main application component
-│   ├── package.json       # Frontend dependencies
-│   └── vite.config.ts     # Build configuration
-├── README.md
-├── PRD.md                 # Product Requirements Document
-└── setup.sh               # Project setup script
-```
-
-## Development Workflow
-
-### Setup
-
-1. Run `./setup.sh` to install dependencies for both backend and frontend
-2. Copy `.env.example` files in both `backend/` and `frontend/` to `.env` and configure as needed
-
-### Running the Application
-
-**Backend:**
+### Quick State Checks
 ```bash
-cd backend
-uv run start_server.py
-# or alternatively:
-# uvicorn app.main:app --reload
+cat .claude/state/current_task.json  # Shows current task
+git branch --show-current             # Current branch/task
 ```
 
-**Frontend:**
-```bash
-cd frontend
-npm run dev
+### current_task.json Format
+
+**ALWAYS use this exact format for .claude/state/current_task.json:**
+```json
+{
+  "task": "task-name",        // Just the task name, NO path, NO .md extension
+  "branch": "feature/branch", // Git branch (NOT "branch_name")
+  "services": ["service1"],   // Array of affected services/modules
+  "updated": "2025-08-27"     // Current date in YYYY-MM-DD format
+}
 ```
 
-The backend runs on `http://localhost:8000` and the frontend on `http://localhost:5173`.
+**Common mistakes to avoid:**
+- ❌ Using `"task_file"` instead of `"task"`
+- ❌ Using `"branch_name"` instead of `"branch"`  
+- ❌ Including path like `"tasks/m-task.md"`
+- ❌ Including `.md` file extension
 
-### Building for Production
+## Using Specialized Agents
 
-**Backend:**
-No separate build step required - FastAPI serves directly
+You have specialized subagents for heavy lifting. Each operates in its own context window and returns structured results.
 
-**Frontend:**
-```bash
-cd frontend
-npm run build
-```
+### Prompting Agents
+Agent descriptions will contain instructions for invocation and prompting. In general, it is safer to issue lightweight prompts. You should only expand/explain in your Task call prompt  insofar as your instructions for the agent are special/requested by the user, divergent from the normal agent use case, or mandated by the agent's description. Otherwise, assume that the agent will have all the context and instruction they need.
 
-### Testing
+Specifically, avoid long prompts when invoking the logging or context-refinement agents. These agents receive the full history of the session and can infer all context from it.
 
-**Backend Tests:**
-```bash
-cd backend
-pytest
-# or for specific test files:
-# pytest tests/test_pump_engine.py -v
-```
+### Available Agents
 
-**Frontend Tests:**
-```bash
-cd frontend
-npm run test
-# or for interactive mode:
-# npm run test:ui
-```
+1. **context-gathering** - Creates comprehensive context manifests for tasks
+   - Use when: Creating new task OR task lacks context manifest
+   - ALWAYS provide the task file path so the agent can update it directly
 
-## Core Functionality
+2. **code-review** - Reviews code for quality and security
+   - Use when: After writing significant code, before commits
+   - Provide files and line ranges where code was implemented
 
-### Pump Analysis Engine
+3. **context-refinement** - Updates context with discoveries from work session
+   - Use when: End of context window (if task continuing)
 
-The core algorithm implements Stake's provably-fair Pump game verification:
+4. **logging** - Maintains clean chronological logs
+   - Use when: End of context window or task completion
 
-1. **HMAC Generation:** Uses `HMAC-SHA256(server_seed, client_seed:nonce:round)` to generate deterministic byte sequences
-2. **Float Conversion:** Converts bytes to floats in range [0,1) for selection shuffle
-3. **Permutation Generation:** Creates a permutation of positions 1-25 using selection shuffle algorithm
-4. **Pump Calculation:** Determines pop point, safe pumps, and multiplier based on difficulty level
-5. **Range Scanning:** Processes nonce ranges to identify hits for target multipliers
+5. **service-documentation** - Updates service CLAUDE.md files
+   - Use when: After service changes
 
-### API Endpoints
+### Agent Principles
+- **Delegate heavy work** - Let agents handle file-heavy operations
+- **Be specific** - Give agents clear context and goals
+- **One agent, one job** - Don't combine responsibilities
 
-The backend exposes a REST API with these key endpoints:
+## Code Philosophy
 
-- `POST /runs` - Create and analyze a new run
-- `GET /runs` - List runs with filtering
-- `GET /runs/{id}` - Get run details
-- `GET /runs/{id}/hits` - Get hits with pagination/filtering
-- `GET /runs/{id}/export/hits.csv` - Export hits as CSV
-- `GET /runs/{id}/export/full.csv` - Export full analysis as CSV
-- `GET /verify` - Verify a single nonce
-- Live Streams endpoints for real-time bet tracking
+### Locality of Behavior
+- Keep related code close together rather than over-abstracting
+- Code that relates to a process should be near that process
+- Functions that serve as interfaces to data structures should live with those structures
 
-### Frontend Features
+### Solve Today's Problems
+- Deal with local problems that exist today
+- Avoid excessive abstraction for hypothetical future problems
 
-- Create new analysis runs with form validation
-- Browse and filter historical runs
-- View detailed run analysis with performance metrics
-- Export data as CSV files
-- Verify individual nonces
-- Real-time bet tracking through Live Streams feature
+### Minimal Abstraction
+- Prefer simple function calls over complex inheritance hierarchies
+- Just calling a function is cleaner than complex inheritance scenarios
 
-## Development Practices
+### Readability > Cleverness
+- Code should be obvious and easy to follow
+- Same structure in every file reduces cognitive load
 
-### Backend
+## Protocol Management
 
-- **Type Safety:** Full type hints throughout the codebase
-- **Async/Await:** Asynchronous endpoints with async database operations
-- **Validation:** Pydantic schemas for request/response validation
-- **Error Handling:** Structured error responses with appropriate HTTP status codes
-- **Testing:** Pytest with comprehensive unit and integration tests
+### CRITICAL: Protocol Recognition Principle
 
-### Frontend
+**When the user mentions protocols:**
 
-- **TypeScript:** Strict typing with comprehensive interfaces
-- **State Management:** TanStack Query for server state management
-- **Component Architecture:** Reusable components with clear separation of concerns
-- **Responsive Design:** Mobile-first responsive UI
-- **Error Handling:** Structured error handling with user-friendly messages
+1. **EXPLICIT requests → Read protocol first, then execute**
+   - Clear commands like "let's compact", "complete the task", "create a new task"
+   - Read the relevant protocol file immediately and proceed
 
-### Database
+2. **VAGUE indications → Confirm first, read only if confirmed**
+   - Ambiguous statements like "I think we're done", "context seems full"
+   - Ask if they want to run the protocol BEFORE reading the file
+   - Only read the protocol file after they confirm
 
-- **ORM:** SQLModel (SQLAlchemy-based) for database operations
-- **Migrations:** Automatic schema creation at startup
-- **Relationships:** Proper foreign key relationships with cascade deletion
-- **Indexes:** Optimized indexes for common query patterns
+**Never attempt to run protocols from memory. Always read the protocol file before executing.**
 
-### Security
+### Protocol Files and Recognition
 
-- **CORS:** Configurable CORS policies
-- **Rate Limiting:** Ingest endpoint rate limiting
-- **Input Validation:** Comprehensive input validation and sanitization
-- **Environment Variables:** Sensitive configuration via environment variables
+These protocols guide specific workflows:
 
-## Key Concepts
+1. **sessions/protocols/task-creation.md** - Creating new tasks
+   - EXPLICIT: "create a new task", "let's make a task for X"
+   - VAGUE: "we should track this", "might need a task for that"
 
-- **Run:** A complete analysis session with seed pair, nonce range, difficulty, and targets
-- **Hit:** A nonce that produces a multiplier matching or exceeding a target value
-- **Nonce:** Sequential index for game plays under a given seed pair
-- **Difficulty:** Pump game difficulty (easy/medium/hard/expert) determining number of pop tokens
-- **Provably Fair:** Cryptographic system ensuring game outcomes are predetermined but verifiable
+2. **sessions/protocols/task-startup.md** - Beginning work on existing tasks  
+   - EXPLICIT: "switch to task X", "let's work on task Y"
+   - VAGUE: "maybe we should look at the other thing"
 
-## Configuration
+3. **sessions/protocols/task-completion.md** - Completing and closing tasks
+   - EXPLICIT: "complete the task", "finish this task", "mark it done"
+   - VAGUE: "I think we're done", "this might be finished"
 
-Environment variables can be set in `.env` files:
+4. **sessions/protocols/context-compaction.md** - Managing context window limits
+   - EXPLICIT: "let's compact", "run context compaction", "compact and restart"
+   - VAGUE: "context is getting full", "we're using a lot of tokens"
 
-**Backend (.env):**
-- `DATABASE_URL` - Database connection string
-- `API_CORS_ORIGINS` - Allowed CORS origins
-- `MAX_NONCES` - Maximum nonces per analysis run
-- `API_HOST`/`API_PORT` - Server binding configuration
+### Behavioral Examples
 
-**Frontend (.env):**
-- `VITE_API_BASE` - Backend API base URL
+**Explicit → Read and execute:**
+- User: "Let's complete this task"
+- You: [Read task-completion.md first] → "I'll complete the task now. Running the logging agent..."
 
-## Testing Strategy
-
-### Backend
-- Unit tests for engine algorithms (golden vector validation)
-- Integration tests for API endpoints
-- Database tests with temporary in-memory SQLite
-- Performance and validation tests
-
-### Frontend
-- Component unit tests with React Testing Library
-- Integration tests for API hooks
-- End-to-end user flow testing
-
-## Deployment Considerations
-
-- Single-user, local-first application
-- SQLite database stored locally
-- No authentication or multi-user support in MVP
-- Designed for modern laptop/desktop systems (8GB+ RAM)
-
+**Vague → Confirm before reading:**
+- User: "I think we might be done here"
+- You: "Would you like me to run the task completion protocol?"
+- User: "Yes"
+- You: [NOW read task-completion.md] → "I'll complete the task now..."
 
 <!-- BACKLOG.MD GUIDELINES START -->
 # Instructions for the usage of Backlog.md CLI Tool
@@ -472,7 +409,7 @@ backlog task edit 42 -s "In Progress" -a @{myself}
 Previously created tasks contain the why and the what. Once you are familiar with that part you should think about a
 plan on **HOW** to tackle the task and all its acceptance criteria. This is your **Implementation Plan**.
 First do a quick check to see if all the tools that you are planning to use are available in the environment you are
-working in.
+working in.   
 When you are ready, write it down in the task so that you can refer to it later.
 
 ```bash
